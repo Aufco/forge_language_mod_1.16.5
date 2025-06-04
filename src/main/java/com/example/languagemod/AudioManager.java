@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.SimpleSound;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.SoundCategory;
 import net.minecraft.util.SoundEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.apache.logging.log4j.LogManager;
@@ -18,6 +19,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AudioManager {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -25,6 +28,9 @@ public class AudioManager {
     
     private Map<String, String> audioMapping = new HashMap<>();
     private boolean audioEnabled = true;
+    private float volumeMultiplier = 1.0f;
+    private float playbackSpeed = 1.0f;
+    private final ExecutorService audioExecutor = Executors.newSingleThreadExecutor();
     
     public AudioManager() {
         instance = this;
@@ -39,34 +45,17 @@ public class AudioManager {
     }
     
     private void loadAudioMapping() {
-        try {
-            Path mappingPath = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/audio_mapping.json");
-            
-            if (!Files.exists(mappingPath)) {
-                LOGGER.warn("Audio mapping file not found at: " + mappingPath);
-                audioEnabled = false;
-                return;
-            }
-            
-            try (BufferedReader reader = new BufferedReader(new FileReader(mappingPath.toString()))) {
-                Gson gson = new Gson();
-                JsonObject json = gson.fromJson(reader, JsonObject.class);
-                json.entrySet().forEach(entry -> 
-                    audioMapping.put(entry.getKey(), entry.getValue().getAsString())
-                );
-                
-                LOGGER.info("Loaded {} audio mappings", audioMapping.size());
-                audioEnabled = true;
-                
-            } catch (IOException e) {
-                LOGGER.error("Failed to load audio mapping file", e);
-                audioEnabled = false;
-            }
-            
-        } catch (Exception e) {
-            LOGGER.error("Error setting up audio mapping", e);
+        // Audio files are named directly with translation keys, no mapping file needed
+        Path audioDir = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/");
+        
+        if (!Files.exists(audioDir)) {
+            LOGGER.warn("Audio directory not found at: " + audioDir);
             audioEnabled = false;
+            return;
         }
+        
+        LOGGER.info("Audio directory exists, audio enabled");
+        audioEnabled = true;
     }
     
     /**
@@ -86,40 +75,55 @@ public class AudioManager {
             return;
         }
         
-        String audioFile = audioMapping.get(translationKey);
-        LOGGER.info("Audio file mapped to: " + audioFile);
+        // Check for both OGG and MP3 files
+        String audioFileNameOgg = translationKey + ".ogg";
+        String audioFileNameMp3 = translationKey + ".mp3";
+        Path audioPathOgg = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/" + audioFileNameOgg);
+        Path audioPathMp3 = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/" + audioFileNameMp3);
         
-        if (audioFile == null) {
-            LOGGER.warn("No audio file found for translation key: " + translationKey);
-            LOGGER.info("Available keys in mapping: " + audioMapping.size());
+        Path audioPath = null;
+        String audioFileName = null;
+        
+        // Prefer OGG files if available
+        if (Files.exists(audioPathOgg)) {
+            audioPath = audioPathOgg;
+            audioFileName = audioFileNameOgg;
+            LOGGER.info("Found OGG audio file: " + audioPath);
+        } else if (Files.exists(audioPathMp3)) {
+            audioPath = audioPathMp3;
+            audioFileName = audioFileNameMp3;
+            LOGGER.info("Found MP3 audio file: " + audioPath);
+        }
+        
+        if (audioPath == null || !Files.exists(audioPath)) {
+            LOGGER.warn("No audio file found for key: " + translationKey);
             return;
         }
         
-        // Check if the audio file actually exists
-        Path audioPath = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/" + audioFile);
-        if (!Files.exists(audioPath)) {
-            LOGGER.error("Audio file does not exist: " + audioPath);
-            LOGGER.error("This means the mapping has an entry but the file is missing!");
-            return;
-        }
+        // Make variables final for lambda
+        final String finalAudioFileName = audioFileName;
+        final Path finalAudioPath = audioPath;
         
-        try {
-            LOGGER.info("Calling playExternalAudio with file: " + audioFile);
-            // For now, we'll use a simple approach with external audio playback
-            // since integrating custom audio files into Minecraft's sound system
-            // requires more complex resource pack setup
-            playExternalAudio(audioFile);
-            
-        } catch (Exception e) {
-            LOGGER.error("Failed to play audio for key: " + translationKey, e);
-        }
+        // Play audio asynchronously to avoid freezing the game
+        audioExecutor.submit(() -> {
+            try {
+                LOGGER.info("Playing audio file: " + finalAudioFileName);
+                // Apply volume from Minecraft settings
+                float masterVolume = Minecraft.getInstance().options.getSoundSourceVolume(net.minecraft.util.SoundCategory.MASTER);
+                float adjustedVolume = masterVolume * volumeMultiplier;
+                playExternalAudio(finalAudioFileName, adjustedVolume, playbackSpeed);
+                
+            } catch (Exception e) {
+                LOGGER.error("Failed to play audio for key: " + translationKey, e);
+            }
+        });
     }
     
     /**
      * Play external audio file using system command
      * This is a simple approach for proof of concept
      */
-    private void playExternalAudio(String audioFile) {
+    private void playExternalAudio(String audioFile, float volume, float speed) {
         try {
             Path audioPath = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/" + audioFile);
             
@@ -130,76 +134,77 @@ public class AudioManager {
                 return;
             }
             
-            // Use different commands based on OS
+            // Use simple command line approach
             String os = System.getProperty("os.name").toLowerCase();
-            ProcessBuilder pb;
-            
             if (os.contains("win")) {
-                // Windows - use multiple fallback approaches
-                boolean success = false;
-                
-                // Try 1: Use PowerShell with Windows Media Foundation
                 try {
-                    pb = new ProcessBuilder("powershell", "-Command", 
-                        "Add-Type -AssemblyName presentationCore; " +
-                        "$player = New-Object System.Windows.Media.MediaPlayer; " +
-                        "$player.Open([uri]'" + audioPath.toString() + "'); " +
-                        "$player.Play(); Start-Sleep -Seconds 2; $player.Close()");
-                    Process process = pb.start();
-                    LOGGER.info("Started PowerShell MediaPlayer for: " + audioFile);
-                    return;
+                    // Use VLC if installed (most reliable for MP3)
+                    String[] vlcPaths = {
+                        "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+                        "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe"
+                    };
+                    
+                    String vlcPath = null;
+                    for (String path : vlcPaths) {
+                        if (Files.exists(Paths.get(path))) {
+                            vlcPath = path;
+                            break;
+                        }
+                    }
+                    
+                    if (vlcPath != null) {
+                        ProcessBuilder pb = new ProcessBuilder(
+                            vlcPath,
+                            "--intf", "dummy",     // No interface
+                            "--play-and-exit",     // Exit after playing
+                            "--no-video",          // Audio only
+                            "--gain", String.valueOf(volume),
+                            "--rate", String.valueOf(speed),
+                            audioPath.toString()
+                        );
+                        Process process = pb.start();
+                        LOGGER.info("Started VLC audio playback for: " + audioFile);
+                        return;
+                    }
                 } catch (Exception e) {
-                    LOGGER.warn("PowerShell MediaPlayer failed: " + e.getMessage());
+                    LOGGER.warn("VLC not available: " + e.getMessage());
                 }
                 
-                // Try 2: Use built-in Windows start command with default player
+                // Use simple PowerShell command that works reliably
                 try {
-                    pb = new ProcessBuilder("cmd", "/c", "start", "/B", "\"\"", audioPath.toString());
+                    String script = String.format(
+                        "(New-Object Media.SoundPlayer '%s').PlaySync()",
+                        audioPath.toString().replace("\\", "\\\\")
+                    );
+                    
+                    ProcessBuilder pb = new ProcessBuilder(
+                        "powershell", "-WindowStyle", "Hidden", "-Command", script
+                    );
                     Process process = pb.start();
-                    LOGGER.info("Started default Windows player for: " + audioFile);
-                    return;
+                    
+                    LOGGER.info("Started PowerShell audio playback for: " + audioFile);
+                    
                 } catch (Exception e) {
-                    LOGGER.warn("Default Windows player failed: " + e.getMessage());
-                }
-                
-                // Try 3: Use PowerShell with simpler SoundPlayer (WAV only)
-                try {
-                    pb = new ProcessBuilder("powershell", "-Command", 
-                        "$player = New-Object System.Media.SoundPlayer('" + audioPath.toString() + "'); " +
-                        "$player.PlaySync()");
-                    Process process = pb.start();
-                    LOGGER.info("Started PowerShell SoundPlayer for: " + audioFile);
-                    return;
-                } catch (Exception e) {
-                    LOGGER.warn("PowerShell SoundPlayer failed: " + e.getMessage());
-                }
-                
-                LOGGER.error("All Windows audio playback methods failed");
-                return;
-                
-            } else if (os.contains("mac")) {
-                // macOS - use afplay
-                pb = new ProcessBuilder("afplay", audioPath.toString());
-            } else {
-                // Linux - try multiple players
-                if (Files.exists(Paths.get("/usr/bin/aplay"))) {
-                    pb = new ProcessBuilder("aplay", audioPath.toString());
-                } else if (Files.exists(Paths.get("/usr/bin/paplay"))) {
-                    pb = new ProcessBuilder("paplay", audioPath.toString());
-                } else {
-                    LOGGER.warn("No audio player found on Linux system");
-                    return;
+                    LOGGER.error("PowerShell audio playback failed", e);
+                    
+                    // Last resort - use start command
+                    try {
+                        ProcessBuilder pb = new ProcessBuilder(
+                            "cmd", "/c", "start", "/min", "\"\"", "\"" + audioPath.toString() + "\""
+                        );
+                        Process process = pb.start();
+                        LOGGER.info("Started default player for: " + audioFile);
+                    } catch (Exception e2) {
+                        LOGGER.error("All playback methods failed", e2);
+                    }
                 }
             }
             
-            // Start the process but don't wait for it to complete
-            Process process = pb.start();
-            LOGGER.info("Successfully started audio playback process for: " + audioFile);
-            
         } catch (Exception e) {
-            LOGGER.error("Failed to play external audio: " + audioFile, e);
+            LOGGER.error("Failed to play audio: " + audioFile, e);
         }
     }
+    
     
     /**
      * Alternative method using Minecraft's sound system (requires sound registration)
@@ -233,6 +238,22 @@ public class AudioManager {
     }
     
     public boolean hasAudioForKey(String translationKey) {
-        return audioEnabled && audioMapping.containsKey(translationKey);
+        if (!audioEnabled) return false;
+        Path audioPathOgg = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/" + translationKey + ".ogg");
+        Path audioPathMp3 = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/" + translationKey + ".mp3");
+        return Files.exists(audioPathOgg) || Files.exists(audioPathMp3);
+    }
+    
+    public void setPlaybackSpeed(float speed) {
+        this.playbackSpeed = Math.max(0.25f, Math.min(2.0f, speed));
+        LOGGER.info("Playback speed set to: " + this.playbackSpeed);
+    }
+    
+    public float getPlaybackSpeed() {
+        return this.playbackSpeed;
+    }
+    
+    public void shutdown() {
+        audioExecutor.shutdown();
     }
 }

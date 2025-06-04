@@ -1,7 +1,7 @@
 # Language Display Mod - Development Notes
 
 ## Project Overview
-This is a Minecraft Forge mod for version 1.16.5 that displays real-time language translations for in-game elements with interactive Spanish audio support.
+This is a Minecraft Forge mod for version 1.16.5 that displays real-time language translations for in-game elements with interactive Spanish audio support and a gamified learning system.
 
 ## Technical Details
 
@@ -16,79 +16,104 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
 1. **Translation System**
    - Loads translation files from `translation_keys/1.16.5/` directory
    - Supports English (`en_us.json`) and Spanish (`es_mx.json`)
-   - Uses Gson for JSON parsing
+   - Enhanced block data from `minecraft_blocks_mod_data.json` with descriptions
+   - Uses Gson for JSON parsing with UTF-8 encoding
    - Translation keys follow Minecraft's standard format (e.g., `block.minecraft.stone`)
 
-2. **Audio System (`AudioManager.java`)**
-   - Loads audio mapping from `audio/es_mx/audio_mapping.json`
-   - Maps translation keys to MP3 files
-   - Supports 4,800+ Spanish audio pronunciations
-   - Uses Windows Media Player, default system player, or PowerShell as fallbacks
-   - Cross-platform audio support (Windows/Mac/Linux)
+2. **Progress Tracking System (`ProgressManager.java`)**
+   - Tracks discovered items, blocks, and biomes
+   - Saves progress to `language_progress.json`
+   - Presents items in sequential order from the data file
+   - Supports skipping items (moved to end of queue)
+   - Displays current target item with Spanish description
+   - Shows progress counter (X/Y items discovered)
 
-3. **Input Handler (`KeyInputHandler.java`)**
-   - Registers F key binding for audio playback
-   - Detects what player is looking at (blocks, entities)
-   - Falls back to held item when not targeting anything
-   - Generates appropriate translation keys for audio lookup
+3. **Audio System (`AudioManager.java`)**
+   - Direct file loading - no mapping file needed
+   - Supports both MP3 and OGG formats (prefers OGG)
+   - Audio files named with translation keys (e.g., `block.minecraft.stone.mp3`)
+   - VLC integration for reliable playback (if installed)
+   - Fallback methods for Windows/Mac/Linux
+   - Asynchronous playback to prevent game freezing
+   - Playback speed control via `/slow` command
 
-4. **HUD Overlay Renderer**
-   - Subscribes to `RenderGameOverlayEvent.Text` event
-   - Renders clean, minimal information in top-left corner
-   - Updates in real-time as player moves/looks around
-   - Color-coded headers (yellow) and content (white)
+4. **Input Handler (`KeyInputHandler.java`)**
+   - Single F key with smart priority system:
+     - If looking at block/entity → speak that
+     - If not looking but holding item → speak item
+     - If neither → speak current biome
+   - Marks items/biomes as discovered (not entities)
+   - Generates appropriate translation keys
 
-### Displayed Information
-- Player's current position coordinates
-- Biome information with English/Spanish translations
-- Targeted block/entity details with translations (contextual)
-- Held item translations (when applicable)
+5. **Command System (`LanguageCommands.java`)**
+   - `/hint` - Shows English description of current target item
+   - `/skip` - Moves current target to end of queue
+   - `/slow` - Check current playback speed
+   - `/slow <0.25-2.0>` - Set audio playback speed
+   - `/testaudio <key>` - Test audio for specific translation key
+
+6. **HUD Overlay Renderer**
+   - Shows progress (X/Y items discovered)
+   - Displays current target item with Spanish description
+   - Shows player position, biome, and what they're looking at
+   - Real-time updates with color-coded information
+   - Word-wrapped Spanish descriptions
+
+### Learning System Features
+- **Gamified Collection**: Players must discover all items/biomes
+- **Achievement Messages**: "¡Descubrimiento!" notifications in chat
+- **Sequential Targets**: Items presented in order from data file
+- **Skip System**: Can skip difficult items for later
+- **Progress Persistence**: Saves between game sessions
+- **Spanish Descriptions**: Detailed descriptions for learning context
 
 ### Audio Implementation
-- **Audio Files**: 4,800+ MP3 files in `audio/es_mx/` directory
-- **Mapping**: JSON file maps translation keys to audio filenames
-- **Playback**: Multiple fallback methods for cross-platform compatibility
-- **Trigger**: F key plays audio for current target or held item
+- **Audio Files**: 4,800+ audio files in `audio/es_mx/` directory
+- **File Naming**: Direct translation key naming (no mapping needed)
+- **Format Support**: MP3 and OGG (OGG preferred)
+- **Playback Methods**:
+  - VLC (hidden mode, best for MP3)
+  - PowerShell Media Player (Windows)
+  - Default system player (last resort)
+- **Volume Control**: Respects Minecraft master volume
+- **Speed Control**: Adjustable playback speed
 
-### Implementation Notes
-- Uses Minecraft's registry system to get namespaced IDs
-- Translation keys generated by converting namespaced IDs (e.g., `minecraft:stone` → `block.minecraft.stone`)
-- File paths are Windows-specific but audio system adapts to OS
-- Clean, minimal UI design focused on language learning
-- Event-driven architecture for real-time updates
-
-### Build Configuration
-- Uses Gradle 7.3.3
-- Java 8 compatibility
-- MCP mappings for 1.16.5
-
-### Audio File Structure
-```
-audio/es_mx/
-├── audio_mapping.json (maps keys to files)
-├── block_minecraft_*.mp3 (block pronunciations)
-├── item_minecraft_*.mp3 (item pronunciations)
-├── entity_minecraft_*.mp3 (entity pronunciations)
-└── biome_minecraft_*.mp3 (biome pronunciations)
-```
+### Data Files
+- **en_us.json**: English translations for all game elements
+- **es_mx.json**: Spanish translations (includes entity names)
+- **minecraft_blocks_mod_data.json**: Enhanced data with:
+  - Spanish/English names
+  - Obtainment tags
+  - Primary use categories
+  - Detailed descriptions in both languages
+- **language_progress.json**: Player progress tracking
 
 ### Usage Flow
-1. Player looks at block/entity or holds item
-2. Mod displays English/Spanish translations in HUD
-3. Player presses F key
-4. Mod determines translation key for current target
-5. Audio system looks up corresponding MP3 file
-6. Spanish pronunciation plays through system audio
+1. Player sees current target item in HUD with Spanish description
+2. Player obtains item and presses F while holding it
+3. Audio plays Spanish pronunciation
+4. Achievement message appears
+5. Progress updates and next target appears
+6. Use `/hint` for help or `/skip` to defer items
 
 ### Key Classes
-- `LanguageDisplayMod`: Main mod class, event registration, translation loading
-- `AudioManager`: Audio file mapping and playback management
-- `KeyInputHandler`: F key detection and target identification
-- `OverlayRenderer`: HUD display rendering (inner class)
+- `LanguageDisplayMod`: Main mod class, manages translations and overlay
+- `AudioManager`: Handles audio playback with multiple fallback methods
+- `KeyInputHandler`: Processes F key with smart priority detection
+- `ProgressManager`: Tracks learning progress and manages targets
+- `LanguageCommands`: Implements hint, skip, and audio commands
 
-### Future Enhancements
-- Configuration GUI for audio settings
-- Additional language support
-- Toggle key for HUD display
-- Volume controls
-- Modded content support
+### Current Status
+- ✅ Full translation system with 900+ items
+- ✅ Progress tracking and persistence
+- ✅ Achievement notifications
+- ✅ Audio playback (best with VLC or OGG files)
+- ✅ Command system for hints and skipping
+- ✅ Entity translations included
+- ✅ UTF-8 support for proper Spanish characters
+
+### Known Limitations
+- MP3 playback requires VLC for best results
+- Windows-specific file paths (hardcoded)
+- No configuration GUI yet
+- Audio speed control limited by playback method

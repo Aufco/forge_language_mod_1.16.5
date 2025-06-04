@@ -16,6 +16,7 @@ import net.minecraft.util.math.BlockRayTraceResult;
 import net.minecraft.util.math.EntityRayTraceResult;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.registry.Registry;
+import net.minecraft.util.text.StringTextComponent;
 import net.minecraft.world.biome.Biome;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -34,6 +35,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 @Mod("languagemod")
 public class LanguageDisplayMod {
@@ -42,6 +46,7 @@ public class LanguageDisplayMod {
     
     private Map<String, String> englishTranslations = new HashMap<>();
     private Map<String, String> spanishTranslations = new HashMap<>();
+    private ProgressManager progressManager;
     
     public LanguageDisplayMod() {
         instance = this;
@@ -50,6 +55,7 @@ public class LanguageDisplayMod {
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(new OverlayRenderer());
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
+        MinecraftForge.EVENT_BUS.register(LanguageCommands.class);
     }
     
     private void setup(final FMLCommonSetupEvent event) {
@@ -59,6 +65,11 @@ public class LanguageDisplayMod {
     private void doClientStuff(final FMLClientSetupEvent event) {
         LOGGER.info("Language Display Mod Client Setup");
         loadTranslations();
+        
+        // Initialize progress manager
+        progressManager = new ProgressManager();
+        KeyInputHandler.setProgressManager(progressManager);
+        LanguageCommands.setProgressManager(progressManager);
         
         // Initialize audio system
         AudioManager.getInstance();
@@ -88,7 +99,8 @@ public class LanguageDisplayMod {
     
     private Map<String, String> loadJsonTranslations(String filePath) {
         Map<String, String> translations = new HashMap<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+        try (BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(
+                new java.io.FileInputStream(filePath), java.nio.charset.StandardCharsets.UTF_8))) {
             Gson gson = new Gson();
             JsonObject json = gson.fromJson(reader, JsonObject.class);
             json.entrySet().forEach(entry -> translations.put(entry.getKey(), entry.getValue().getAsString()));
@@ -120,6 +132,10 @@ public class LanguageDisplayMod {
         return instance;
     }
     
+    public ProgressManager getProgressManager() {
+        return progressManager;
+    }
+    
     public static class OverlayRenderer {
         @SubscribeEvent
         public void onRenderGameOverlay(RenderGameOverlayEvent.Text event) {
@@ -142,6 +158,48 @@ public class LanguageDisplayMod {
             
             // Start without header for cleaner look
             y += lineHeight;
+            
+            // Progress information
+            ProgressManager pm = instance.getProgressManager();
+            if (pm != null) {
+                int discovered = pm.getDiscoveredCount();
+                int total = pm.getTotalItemCount();
+                fontRenderer.draw(matrixStack, "Progress: " + discovered + "/" + total + " items", x, y, 0x00FF00);
+                y += lineHeight;
+                
+                // Current target item
+                String currentTarget = pm.getCurrentTargetItem();
+                if (currentTarget != null) {
+                    ProgressManager.BlockData targetData = pm.getCurrentTargetData();
+                    if (targetData != null) {
+                        fontRenderer.draw(matrixStack, "Target: " + targetData.spanish_name + " (" + targetData.english_name + ")", x, y, 0xFFFF00);
+                        y += lineHeight;
+                        
+                        // Spanish description wrapped
+                        String desc = targetData.description_spanish;
+                        int maxWidth = 300;
+                        List<? extends net.minecraft.util.IReorderingProcessor> wrappedLines = fontRenderer.split(new StringTextComponent(desc), maxWidth);
+                        List<String> lines = new ArrayList<>();
+                        for (net.minecraft.util.IReorderingProcessor processor : wrappedLines) {
+                            // Convert IReorderingProcessor to String
+                            StringBuilder sb = new StringBuilder();
+                            processor.accept((index, style, codepoint) -> {
+                                sb.append((char)codepoint);
+                                return true;
+                            });
+                            lines.add(sb.toString());
+                        }
+                        for (String line : lines) {
+                            fontRenderer.draw(matrixStack, line, x, y, 0xAAAAAA);
+                            y += lineHeight;
+                        }
+                    }
+                } else {
+                    fontRenderer.draw(matrixStack, "All items discovered!", x, y, 0x00FF00);
+                    y += lineHeight;
+                }
+                y += lineHeight;
+            }
             
             // Current location
             BlockPos playerPos = mc.player.blockPosition();
@@ -206,9 +264,20 @@ public class LanguageDisplayMod {
                     
                     fontRenderer.draw(matrixStack, "Looking At:", x, y, 0xFFFF00);
                     y += lineHeight;
-                    fontRenderer.draw(matrixStack, "  EN: " + LanguageDisplayMod.getInstance().getEnglishTranslation(entityKey), x, y, color);
+                    
+                    String enTranslation = LanguageDisplayMod.getInstance().getEnglishTranslation(entityKey);
+                    String esTranslation = LanguageDisplayMod.getInstance().getSpanishTranslation(entityKey);
+                    
+                    // If translation is missing, show cleaner format
+                    if (enTranslation.equals(entityKey)) {
+                        String cleanName = entityRL.getPath();
+                        cleanName = cleanName.substring(0, 1).toUpperCase() + cleanName.substring(1).replace('_', ' ');
+                        enTranslation = cleanName;
+                    }
+                    
+                    fontRenderer.draw(matrixStack, "  EN: " + enTranslation, x, y, color);
                     y += lineHeight;
-                    fontRenderer.draw(matrixStack, "  ES: " + LanguageDisplayMod.getInstance().getSpanishTranslation(entityKey), x, y, color);
+                    fontRenderer.draw(matrixStack, "  ES: " + esTranslation, x, y, color);
                 }
             }
         }

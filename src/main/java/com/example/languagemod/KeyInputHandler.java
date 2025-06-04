@@ -11,6 +11,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockRayTraceResult;
 import net.minecraft.util.math.EntityRayTraceResult;
 import net.minecraft.util.math.RayTraceResult;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.world.biome.Biome;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
@@ -20,6 +22,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class KeyInputHandler {
     private static final Logger LOGGER = LogManager.getLogger();
+    private static ProgressManager progressManager;
     
     public static final KeyBinding SPEAK_KEY = new KeyBinding(
         "key.languagemod.speak",
@@ -31,10 +34,14 @@ public class KeyInputHandler {
         ClientRegistry.registerKeyBinding(SPEAK_KEY);
     }
     
+    public static void setProgressManager(ProgressManager manager) {
+        progressManager = manager;
+    }
+    
     @SubscribeEvent
     public void onKeyInput(InputEvent.KeyInputEvent event) {
         if (SPEAK_KEY.consumeClick()) {
-            LOGGER.info("F key pressed - handling speak key event");
+            LOGGER.info("F key pressed - handling speak with priority system");
             handleSpeakKey();
         }
     }
@@ -54,15 +61,120 @@ public class KeyInputHandler {
             return;
         }
         
-        String translationKey = getCurrentTargetTranslationKey();
-        LOGGER.info("Translation key obtained: " + translationKey);
-        
-        if (translationKey != null) {
-            LOGGER.info("Attempting to play audio for: " + translationKey);
-            audioManager.playAudio(translationKey);
-        } else {
-            LOGGER.warn("No valid target found to speak");
+        // Priority system:
+        // 1. Check what player is looking at (block or entity)
+        RayTraceResult rayTrace = mc.hitResult;
+        if (rayTrace != null && rayTrace.getType() != RayTraceResult.Type.MISS) {
+            String translationKey = null;
+            
+            if (rayTrace.getType() == RayTraceResult.Type.BLOCK) {
+                translationKey = getBlockTranslationKey((BlockRayTraceResult) rayTrace);
+                LOGGER.info("Looking at block, key: " + translationKey);
+                
+                if (translationKey != null) {
+                    audioManager.playAudio(translationKey);
+                    markAsDiscovered(translationKey);
+                    return;
+                }
+            } else if (rayTrace.getType() == RayTraceResult.Type.ENTITY) {
+                translationKey = getEntityTranslationKey((EntityRayTraceResult) rayTrace);
+                LOGGER.info("Looking at entity, key: " + translationKey);
+                
+                if (translationKey != null) {
+                    audioManager.playAudio(translationKey);
+                    // Don't mark entities as discovered - no achievements for entities
+                    return;
+                }
+            }
         }
+        
+        // 2. Check held item
+        ItemStack heldItem = mc.player.getMainHandItem();
+        if (!heldItem.isEmpty()) {
+            String translationKey = getItemTranslationKey(heldItem);
+            LOGGER.info("Holding item, key: " + translationKey);
+            
+            if (translationKey != null) {
+                audioManager.playAudio(translationKey);
+                markAsDiscovered(translationKey);
+                return;
+            }
+        }
+        
+        // 3. Fall back to biome
+        BlockPos playerPos = mc.player.blockPosition();
+        Biome biome = mc.level.getBiome(playerPos);
+        ResourceLocation biomeRL = mc.level.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY).getKey(biome);
+        
+        if (biomeRL != null) {
+            String biomeKey = "biome." + biomeRL.toString().replace(':', '.');
+            LOGGER.info("In biome, key: " + biomeKey);
+            
+            audioManager.playAudio(biomeKey);
+            
+            // Mark biome as discovered
+            if (progressManager != null) {
+                boolean wasNewDiscovery = !progressManager.isBiomeDiscovered(biomeRL.toString());
+                progressManager.markBiomeDiscovered(biomeRL.toString());
+                
+                if (wasNewDiscovery) {
+                    String biomeName = LanguageDisplayMod.getInstance().getEnglishTranslation(biomeKey);
+                    
+                    mc.player.displayClientMessage(
+                        new net.minecraft.util.text.StringTextComponent("¡Bioma Descubierto! ")
+                            .withStyle(net.minecraft.util.text.TextFormatting.AQUA, net.minecraft.util.text.TextFormatting.BOLD)
+                            .append(new net.minecraft.util.text.StringTextComponent("Has explorado: ")
+                                .withStyle(net.minecraft.util.text.TextFormatting.YELLOW))
+                            .append(new net.minecraft.util.text.StringTextComponent(biomeName)
+                                .withStyle(net.minecraft.util.text.TextFormatting.WHITE))
+                            .append(new net.minecraft.util.text.StringTextComponent(" (" + progressManager.getDiscoveredBiomeCount() + " biomes)")
+                                .withStyle(net.minecraft.util.text.TextFormatting.GRAY)),
+                        false
+                    );
+                    
+                    LOGGER.info("Achievement: Discovered biome " + biomeName + " (" + progressManager.getDiscoveredBiomeCount() + " biomes discovered)");
+                }
+            }
+        }
+    }
+    
+    private void markAsDiscovered(String translationKey) {
+        if (progressManager != null) {
+            boolean wasNewDiscovery = !progressManager.isItemDiscovered(translationKey);
+            progressManager.markItemDiscovered(translationKey);
+            
+            if (wasNewDiscovery) {
+                ProgressManager.BlockData data = progressManager.getBlockData(translationKey);
+                String itemName = data != null ? data.english_name : translationKey;
+                
+                Minecraft mc = Minecraft.getInstance();
+                mc.player.displayClientMessage(
+                    new net.minecraft.util.text.StringTextComponent("¡Descubrimiento! ")
+                        .withStyle(net.minecraft.util.text.TextFormatting.GOLD, net.minecraft.util.text.TextFormatting.BOLD)
+                        .append(new net.minecraft.util.text.StringTextComponent("Has aprendido: ")
+                            .withStyle(net.minecraft.util.text.TextFormatting.YELLOW))
+                        .append(new net.minecraft.util.text.StringTextComponent(itemName)
+                            .withStyle(net.minecraft.util.text.TextFormatting.WHITE))
+                        .append(new net.minecraft.util.text.StringTextComponent(" (" + progressManager.getDiscoveredCount() + "/" + progressManager.getTotalItemCount() + ")")
+                            .withStyle(net.minecraft.util.text.TextFormatting.GRAY)),
+                    false
+                );
+                
+                LOGGER.info("Achievement: Discovered " + itemName + " (" + progressManager.getDiscoveredCount() + "/" + progressManager.getTotalItemCount() + ")");
+            }
+        }
+    }
+    
+    private void handleSpeakItemKey() {
+        // Old method body was removed - handled by new handleSpeakKey
+    }
+    
+    private void handleSpeakBiomeKey() {
+        // Old method body was removed - handled by new handleSpeakKey
+    }
+    
+    private void handleSpeakTargetKey() {
+        // Old method body was removed - handled by new handleSpeakKey
     }
     
     /**
