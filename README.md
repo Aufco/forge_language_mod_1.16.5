@@ -1,46 +1,37 @@
 # Language Display Mod for Minecraft 1.16.5
 
-A Minecraft Forge mod that displays real-time information about your surroundings with multilingual support.
+A Minecraft Forge mod that displays real-time language translations for in-game elements with audio support. Perfect for learning Spanish while playing Minecraft!
 
 ## Features
 
-The mod displays the following information in the top-left corner of your screen:
+### Visual Display
+The mod shows clean, minimal information in the top-left corner:
+- **Position**: Your current coordinates
+- **Biome**: Current biome with English and Spanish translations
+- **Looking At**: Block or entity you're targeting with translations
+- **Holding**: Item in your main hand with translations
 
-- **Current Position**: Your current block coordinates (X, Y, Z)
-- **Biome Information**: Current biome with English and Spanish translations
-- **Target Block**: Information about the block you're looking at with translations
-- **Held Item**: Details about the item in your main hand with translations
-- **Entity Info**: Information about entities under your crosshair with translations
+### Audio Support
+- Press **F** to hear Spanish audio pronunciation of whatever you're looking at
+- If not looking at anything, it reads your held item
+- Over 4,800 audio files covering blocks, items, entities, and more
 
 ## Example Display
 
 ```
-Block: 31 77 6
+Position: 150, 64, -200
 
-Biome Info:
-Biome: minecraft:jungle
-Translation key: biome.minecraft.jungle
-English: Jungle
-Spanish: Jungla
+Biome:
+  EN: Forest
+  ES: Bosque
 
-Target Block Info:
-Targeted Block: 32, 73, 11
-Namespaced ID: minecraft:melon
-Translation key: block.minecraft.melon
-English: Melon
-Spanish: Sandía
+Looking At:
+  EN: Stone
+  ES: Piedra
 
-Held Item (in main hand):
-Held Item: minecraft:stone_sword
-Translation key: item.minecraft.stone_sword
-English: Stone Sword
-Spanish: Espada de piedra
-
-Entity Under Crosshair:
-Entity: minecraft:zombie
-Translation key: entity.minecraft.zombie
-English: Zombie
-Spanish: Zombi
+Holding:
+  EN: Diamond Pickaxe
+  ES: Pico de Diamante
 ```
 
 ## Requirements
@@ -48,6 +39,7 @@ Spanish: Zombi
 - Minecraft 1.16.5
 - Minecraft Forge 36.2.34 or higher
 - Java 8
+- Windows (for audio support)
 
 ## Installation
 
@@ -56,25 +48,35 @@ Spanish: Zombi
 3. Place the JAR file in your `.minecraft/mods` folder
 4. Launch Minecraft with the Forge profile
 
+## Controls
+
+- **F Key**: Play Spanish audio for the item/block/entity you're looking at
+
+## Languages Supported
+
+- English (en_us)
+- Spanish (es_mx) with full audio pronunciation
+
 ## Building from Source
 
 1. Clone the repository
-2. Open a terminal in the project directory
-3. Run `./gradlew build` (or `gradlew build` on Windows)
-4. The built JAR will be in `build/libs/`
+2. Run `./gradlew build` (or `gradlew build` on Windows)
+3. The built JAR will be in `build/libs/`
 
 ## Development Setup
 
 1. Clone the repository
 2. Run `./gradlew genEclipseRuns` for Eclipse
-3. Run `./gradlew eclipse` to generate project files
-4. Import the project into your IDE
-5. Run `./gradlew runClient` to test the mod
+3. Import the project into your IDE
+4. Run `./gradlew runClient` to test the mod
 
-## Languages Supported
+## Audio Files
 
-- English (en_us)
-- Spanish (es_mx)
+The mod includes over 4,800 Spanish audio files located in `audio/es_mx/` covering:
+- All vanilla blocks
+- All vanilla items  
+- All vanilla entities
+- Biomes, advancements, and UI elements
 
 ## License
 

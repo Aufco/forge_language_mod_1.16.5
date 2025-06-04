@@ -49,6 +49,7 @@ public class LanguageDisplayMod {
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::doClientStuff);
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(new OverlayRenderer());
+        MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
     }
     
     private void setup(final FMLCommonSetupEvent event) {
@@ -58,6 +59,12 @@ public class LanguageDisplayMod {
     private void doClientStuff(final FMLClientSetupEvent event) {
         LOGGER.info("Language Display Mod Client Setup");
         loadTranslations();
+        
+        // Initialize audio system
+        AudioManager.getInstance();
+        
+        // Register keybindings
+        KeyInputHandler.register();
     }
     
     private void loadTranslations() {
@@ -70,6 +77,10 @@ public class LanguageDisplayMod {
             
             LOGGER.info("Loaded {} English translations", englishTranslations.size());
             LOGGER.info("Loaded {} Spanish translations", spanishTranslations.size());
+            
+            // Test a few translations
+            LOGGER.info("Test - Stone Sword EN: " + englishTranslations.get("item.minecraft.stone_sword"));
+            LOGGER.info("Test - Stone Sword ES: " + spanishTranslations.get("item.minecraft.stone_sword"));
         } catch (Exception e) {
             LOGGER.error("Failed to load translations", e);
         }
@@ -88,11 +99,21 @@ public class LanguageDisplayMod {
     }
     
     public String getEnglishTranslation(String key) {
-        return englishTranslations.getOrDefault(key, key);
+        String translation = englishTranslations.get(key);
+        if (translation == null) {
+            LOGGER.warn("Missing English translation for key: " + key);
+            return key;
+        }
+        return translation;
     }
     
     public String getSpanishTranslation(String key) {
-        return spanishTranslations.getOrDefault(key, key);
+        String translation = spanishTranslations.get(key);
+        if (translation == null) {
+            LOGGER.warn("Missing Spanish translation for key: " + key);
+            return key;
+        }
+        return translation;
     }
     
     public static LanguageDisplayMod getInstance() {
@@ -119,56 +140,44 @@ public class LanguageDisplayMod {
             int lineHeight = 10;
             int color = 0xFFFFFF;
             
-            // Player position
+            // Start without header for cleaner look
+            y += lineHeight;
+            
+            // Current location
             BlockPos playerPos = mc.player.blockPosition();
-            fontRenderer.draw(matrixStack, "Block: " + playerPos.getX() + " " + playerPos.getY() + " " + playerPos.getZ(), x, y, color);
+            fontRenderer.draw(matrixStack, "Position: " + playerPos.getX() + ", " + playerPos.getY() + ", " + playerPos.getZ(), x, y, color);
             y += lineHeight * 2;
             
             // Biome info
-            fontRenderer.draw(matrixStack, "Biome Info:", x, y, color);
-            y += lineHeight;
-            
             Biome biome = mc.level.getBiome(playerPos);
             ResourceLocation biomeRL = mc.level.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY).getKey(biome);
             if (biomeRL != null) {
-                String biomeNamespace = biomeRL.toString();
                 String biomeKey = "biome." + biomeRL.toString().replace(':', '.');
                 
-                fontRenderer.draw(matrixStack, "Biome: " + biomeNamespace, x, y, color);
+                fontRenderer.draw(matrixStack, "Biome:", x, y, 0xFFFF00);
                 y += lineHeight;
-                fontRenderer.draw(matrixStack, "Translation key: " + biomeKey, x, y, color);
+                fontRenderer.draw(matrixStack, "  EN: " + LanguageDisplayMod.getInstance().getEnglishTranslation(biomeKey), x, y, color);
                 y += lineHeight;
-                fontRenderer.draw(matrixStack, "English: " + LanguageDisplayMod.getInstance().getEnglishTranslation(biomeKey), x, y, color);
-                y += lineHeight;
-                fontRenderer.draw(matrixStack, "Spanish: " + LanguageDisplayMod.getInstance().getSpanishTranslation(biomeKey), x, y, color);
+                fontRenderer.draw(matrixStack, "  ES: " + LanguageDisplayMod.getInstance().getSpanishTranslation(biomeKey), x, y, color);
                 y += lineHeight * 2;
             }
             
             // Target block info
             RayTraceResult rayTrace = mc.hitResult;
             if (rayTrace != null && rayTrace.getType() == RayTraceResult.Type.BLOCK) {
-                fontRenderer.draw(matrixStack, "Target Block Info:", x, y, color);
-                y += lineHeight;
-                
                 BlockRayTraceResult blockRayTrace = (BlockRayTraceResult) rayTrace;
-                BlockPos targetPos = blockRayTrace.getBlockPos();
-                BlockState blockState = mc.level.getBlockState(targetPos);
+                BlockState blockState = mc.level.getBlockState(blockRayTrace.getBlockPos());
                 Block block = blockState.getBlock();
                 ResourceLocation blockRL = block.getRegistryName();
                 
                 if (blockRL != null) {
-                    String blockNamespace = blockRL.toString();
                     String blockKey = "block." + blockRL.toString().replace(':', '.');
                     
-                    fontRenderer.draw(matrixStack, "Targeted Block: " + targetPos.getX() + ", " + targetPos.getY() + ", " + targetPos.getZ(), x, y, color);
+                    fontRenderer.draw(matrixStack, "Looking At:", x, y, 0xFFFF00);
                     y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Namespaced ID: " + blockNamespace, x, y, color);
+                    fontRenderer.draw(matrixStack, "  EN: " + LanguageDisplayMod.getInstance().getEnglishTranslation(blockKey), x, y, color);
                     y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Translation key: " + blockKey, x, y, color);
-                    y += lineHeight;
-                    fontRenderer.draw(matrixStack, "English: " + LanguageDisplayMod.getInstance().getEnglishTranslation(blockKey), x, y, color);
-                    y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Spanish: " + LanguageDisplayMod.getInstance().getSpanishTranslation(blockKey), x, y, color);
+                    fontRenderer.draw(matrixStack, "  ES: " + LanguageDisplayMod.getInstance().getSpanishTranslation(blockKey), x, y, color);
                     y += lineHeight * 2;
                 }
             }
@@ -176,45 +185,30 @@ public class LanguageDisplayMod {
             // Held item info
             ItemStack heldItem = mc.player.getMainHandItem();
             if (!heldItem.isEmpty()) {
-                fontRenderer.draw(matrixStack, "Held Item (in main hand):", x, y, color);
-                y += lineHeight;
+                String translationKey = heldItem.getItem().getDescriptionId();
                 
-                ResourceLocation itemRL = heldItem.getItem().getRegistryName();
-                if (itemRL != null) {
-                    String itemNamespace = itemRL.toString();
-                    String itemKey = "item." + itemRL.toString().replace(':', '.');
-                    
-                    fontRenderer.draw(matrixStack, "Held Item: " + itemNamespace, x, y, color);
-                    y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Translation key: " + itemKey, x, y, color);
-                    y += lineHeight;
-                    fontRenderer.draw(matrixStack, "English: " + LanguageDisplayMod.getInstance().getEnglishTranslation(itemKey), x, y, color);
-                    y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Spanish: " + LanguageDisplayMod.getInstance().getSpanishTranslation(itemKey), x, y, color);
-                    y += lineHeight * 2;
-                }
+                fontRenderer.draw(matrixStack, "Holding:", x, y, 0xFFFF00);
+                y += lineHeight;
+                fontRenderer.draw(matrixStack, "  EN: " + LanguageDisplayMod.getInstance().getEnglishTranslation(translationKey), x, y, color);
+                y += lineHeight;
+                fontRenderer.draw(matrixStack, "  ES: " + LanguageDisplayMod.getInstance().getSpanishTranslation(translationKey), x, y, color);
+                y += lineHeight * 2;
             }
             
             // Entity under crosshair
             if (rayTrace != null && rayTrace.getType() == RayTraceResult.Type.ENTITY) {
-                fontRenderer.draw(matrixStack, "Entity Under Crosshair:", x, y, color);
-                y += lineHeight;
-                
                 EntityRayTraceResult entityRayTrace = (EntityRayTraceResult) rayTrace;
                 Entity entity = entityRayTrace.getEntity();
                 ResourceLocation entityRL = entity.getType().getRegistryName();
                 
                 if (entityRL != null) {
-                    String entityNamespace = entityRL.toString();
                     String entityKey = "entity." + entityRL.toString().replace(':', '.');
                     
-                    fontRenderer.draw(matrixStack, "Entity: " + entityNamespace, x, y, color);
+                    fontRenderer.draw(matrixStack, "Looking At:", x, y, 0xFFFF00);
                     y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Translation key: " + entityKey, x, y, color);
+                    fontRenderer.draw(matrixStack, "  EN: " + LanguageDisplayMod.getInstance().getEnglishTranslation(entityKey), x, y, color);
                     y += lineHeight;
-                    fontRenderer.draw(matrixStack, "English: " + LanguageDisplayMod.getInstance().getEnglishTranslation(entityKey), x, y, color);
-                    y += lineHeight;
-                    fontRenderer.draw(matrixStack, "Spanish: " + LanguageDisplayMod.getInstance().getSpanishTranslation(entityKey), x, y, color);
+                    fontRenderer.draw(matrixStack, "  ES: " + LanguageDisplayMod.getInstance().getSpanishTranslation(entityKey), x, y, color);
                 }
             }
         }
