@@ -23,96 +23,25 @@ public class LanguageCommands {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSource> dispatcher = event.getDispatcher();
         
-        // Register /hint command
+        // Register /hint command - no longer shows hints since we removed descriptions
         LiteralArgumentBuilder<CommandSource> hintCommand = Commands.literal("hint")
                 .executes(context -> {
-                    if (progressManager != null) {
-                        String hint = progressManager.getCurrentTargetHint();
-                        String targetItem = progressManager.getCurrentTargetItem();
-                        
-                        if (targetItem != null) {
-                            ProgressManager.BlockData data = progressManager.getCurrentTargetData();
-                            if (data != null) {
-                                context.getSource().sendSuccess(
-                                    new StringTextComponent("Current target: ")
-                                        .withStyle(TextFormatting.YELLOW)
-                                        .append(new StringTextComponent(data.english_name)
-                                            .withStyle(TextFormatting.WHITE)),
-                                    false
-                                );
-                            }
-                        }
-                        
-                        context.getSource().sendSuccess(
-                            new StringTextComponent("Hint: ")
-                                .withStyle(TextFormatting.AQUA)
-                                .append(new StringTextComponent(hint)
-                                    .withStyle(TextFormatting.WHITE)),
-                            false
-                        );
-                    } else {
-                        context.getSource().sendFailure(
-                            new StringTextComponent("Progress system not initialized!")
-                                .withStyle(TextFormatting.RED)
-                        );
-                    }
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/hint command has been removed in this version")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
                     return 1;
                 });
         
-        // Register /skip command
+        // Register /skip command - no longer used since we removed the target system
         LiteralArgumentBuilder<CommandSource> skipCommand = Commands.literal("skip")
                 .executes(context -> {
-                    if (progressManager != null) {
-                        String currentItem = progressManager.getCurrentTargetItem();
-                        if (currentItem != null) {
-                            ProgressManager.BlockData data = progressManager.getBlockData(currentItem);
-                            String itemName = data != null ? data.english_name : currentItem;
-                            
-                            progressManager.skipCurrentItem();
-                            
-                            context.getSource().sendSuccess(
-                                new StringTextComponent("Skipped: ")
-                                    .withStyle(TextFormatting.YELLOW)
-                                    .append(new StringTextComponent(itemName)
-                                        .withStyle(TextFormatting.WHITE))
-                                    .append(new StringTextComponent(" (moved to end of queue)")
-                                        .withStyle(TextFormatting.GRAY)),
-                                false
-                            );
-                            
-                            // Show new target
-                            String newTarget = progressManager.getCurrentTargetItem();
-                            if (newTarget != null) {
-                                ProgressManager.BlockData newData = progressManager.getBlockData(newTarget);
-                                if (newData != null) {
-                                    context.getSource().sendSuccess(
-                                        new StringTextComponent("New target: ")
-                                            .withStyle(TextFormatting.GREEN)
-                                            .append(new StringTextComponent(newData.english_name)
-                                                .withStyle(TextFormatting.WHITE)),
-                                        false
-                                    );
-                                }
-                            } else {
-                                context.getSource().sendSuccess(
-                                    new StringTextComponent("All items discovered!")
-                                        .withStyle(TextFormatting.GREEN),
-                                    false
-                                );
-                            }
-                        } else {
-                            context.getSource().sendSuccess(
-                                new StringTextComponent("No items left to skip!")
-                                    .withStyle(TextFormatting.YELLOW),
-                                false
-                            );
-                        }
-                    } else {
-                        context.getSource().sendFailure(
-                            new StringTextComponent("Progress system not initialized!")
-                                .withStyle(TextFormatting.RED)
-                        );
-                    }
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/skip command has been removed in this version")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
                     return 1;
                 });
         
@@ -179,10 +108,129 @@ public class LanguageCommands {
                         return 1;
                     }));
         
+        // Register /flashcard command to manually trigger a flashcard
+        LiteralArgumentBuilder<CommandSource> flashcardCommand = Commands.literal("flashcard")
+                .executes(context -> {
+                    if (progressManager != null) {
+                        progressManager.showRandomFlashcard();
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Flashcard triggered!")
+                                .withStyle(TextFormatting.GREEN),
+                            false
+                        );
+                    } else {
+                        context.getSource().sendFailure(
+                            new StringTextComponent("Progress system not initialized!")
+                                .withStyle(TextFormatting.RED)
+                        );
+                    }
+                    return 1;
+                });
+        
+        // Register /progress command to show progress stats
+        LiteralArgumentBuilder<CommandSource> progressCommand = Commands.literal("progress")
+                .executes(context -> {
+                    if (progressManager != null) {
+                        int discovered = progressManager.getDiscoveredCount();
+                        int total = progressManager.getTotalItemCount();
+                        int mastered = progressManager.getMasteredCount();
+                        int biomes = progressManager.getDiscoveredBiomeCount();
+                        
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("=== Progress Statistics ===")
+                                .withStyle(TextFormatting.GOLD, TextFormatting.BOLD),
+                            false
+                        );
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Total discovered: " + discovered + "/" + total + " (" + 
+                                String.format("%.1f", (discovered * 100.0 / total)) + "%)")
+                                .withStyle(TextFormatting.GREEN),
+                            false
+                        );
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Items mastered: " + mastered + " (5+ correct flashcards)")
+                                .withStyle(TextFormatting.AQUA),
+                            false
+                        );
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Biomes discovered: " + biomes)
+                                .withStyle(TextFormatting.YELLOW),
+                            false
+                        );
+                    } else {
+                        context.getSource().sendFailure(
+                            new StringTextComponent("Progress system not initialized!")
+                                .withStyle(TextFormatting.RED)
+                        );
+                    }
+                    return 1;
+                });
+        
+        // Register /languagehelp command (using languagehelp to avoid conflicts)
+        LiteralArgumentBuilder<CommandSource> helpCommand = Commands.literal("languagehelp")
+                .executes(context -> {
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("=== Language Mod Commands ===")
+                            .withStyle(TextFormatting.GOLD, TextFormatting.BOLD),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/progress - Show your learning progress")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/flashcard - Trigger a flashcard quiz")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/slow [speed] - Set audio playback speed (0.25-2.0)")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/testaudio <key> - Test audio for a translation key")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/languagetoggle - Toggle welcome message on/off")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/languagehelp - Show this help message")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    return 1;
+                });
+        
+        // Register /languagetoggle command
+        LiteralArgumentBuilder<CommandSource> toggleCommand = Commands.literal("languagetoggle")
+                .executes(context -> {
+                    ProgressManager pm = progressManager;
+                    if (pm != null) {
+                        boolean newValue = !pm.isWelcomeMessageEnabled();
+                        pm.setWelcomeMessageEnabled(newValue);
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Welcome message is now " + (newValue ? "ENABLED" : "DISABLED"))
+                                .withStyle(newValue ? TextFormatting.GREEN : TextFormatting.RED),
+                            false
+                        );
+                    }
+                    return 1;
+                });
+        
         dispatcher.register(hintCommand);
         dispatcher.register(skipCommand);
         dispatcher.register(slowCommand);
         dispatcher.register(testAudioCommand);
+        dispatcher.register(flashcardCommand);
+        dispatcher.register(progressCommand);
+        dispatcher.register(helpCommand);
+        dispatcher.register(toggleCommand);
         
         LOGGER.info("Language commands registered");
     }

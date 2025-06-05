@@ -82,7 +82,8 @@ public class KeyInputHandler {
                 
                 if (translationKey != null) {
                     audioManager.playAudio(translationKey);
-                    // Don't mark entities as discovered - no achievements for entities
+                    // Mark entity as discovered
+                    markEntityAsDiscovered(translationKey);
                     return;
                 }
             }
@@ -114,54 +115,20 @@ public class KeyInputHandler {
             
             // Mark biome as discovered
             if (progressManager != null) {
-                boolean wasNewDiscovery = !progressManager.isBiomeDiscovered(biomeRL.toString());
                 progressManager.markBiomeDiscovered(biomeRL.toString());
-                
-                if (wasNewDiscovery) {
-                    String biomeName = LanguageDisplayMod.getInstance().getEnglishTranslation(biomeKey);
-                    
-                    mc.player.displayClientMessage(
-                        new net.minecraft.util.text.StringTextComponent("¡Bioma Descubierto! ")
-                            .withStyle(net.minecraft.util.text.TextFormatting.AQUA, net.minecraft.util.text.TextFormatting.BOLD)
-                            .append(new net.minecraft.util.text.StringTextComponent("Has explorado: ")
-                                .withStyle(net.minecraft.util.text.TextFormatting.YELLOW))
-                            .append(new net.minecraft.util.text.StringTextComponent(biomeName)
-                                .withStyle(net.minecraft.util.text.TextFormatting.WHITE))
-                            .append(new net.minecraft.util.text.StringTextComponent(" (" + progressManager.getDiscoveredBiomeCount() + " biomes)")
-                                .withStyle(net.minecraft.util.text.TextFormatting.GRAY)),
-                        false
-                    );
-                    
-                    LOGGER.info("Achievement: Discovered biome " + biomeName + " (" + progressManager.getDiscoveredBiomeCount() + " biomes discovered)");
-                }
             }
         }
     }
     
     private void markAsDiscovered(String translationKey) {
         if (progressManager != null) {
-            boolean wasNewDiscovery = !progressManager.isItemDiscovered(translationKey);
             progressManager.markItemDiscovered(translationKey);
-            
-            if (wasNewDiscovery) {
-                ProgressManager.BlockData data = progressManager.getBlockData(translationKey);
-                String itemName = data != null ? data.english_name : translationKey;
-                
-                Minecraft mc = Minecraft.getInstance();
-                mc.player.displayClientMessage(
-                    new net.minecraft.util.text.StringTextComponent("¡Descubrimiento! ")
-                        .withStyle(net.minecraft.util.text.TextFormatting.GOLD, net.minecraft.util.text.TextFormatting.BOLD)
-                        .append(new net.minecraft.util.text.StringTextComponent("Has aprendido: ")
-                            .withStyle(net.minecraft.util.text.TextFormatting.YELLOW))
-                        .append(new net.minecraft.util.text.StringTextComponent(itemName)
-                            .withStyle(net.minecraft.util.text.TextFormatting.WHITE))
-                        .append(new net.minecraft.util.text.StringTextComponent(" (" + progressManager.getDiscoveredCount() + "/" + progressManager.getTotalItemCount() + ")")
-                            .withStyle(net.minecraft.util.text.TextFormatting.GRAY)),
-                    false
-                );
-                
-                LOGGER.info("Achievement: Discovered " + itemName + " (" + progressManager.getDiscoveredCount() + "/" + progressManager.getTotalItemCount() + ")");
-            }
+        }
+    }
+    
+    private void markEntityAsDiscovered(String translationKey) {
+        if (progressManager != null) {
+            progressManager.markEntityDiscovered(translationKey);
         }
     }
     

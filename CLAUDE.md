@@ -1,7 +1,7 @@
 # Language Display Mod - Development Notes
 
 ## Project Overview
-This is a Minecraft Forge mod for version 1.16.5 that displays real-time language translations for in-game elements with interactive Spanish audio support and a gamified learning system.
+This is a Minecraft Forge mod for version 1.16.5 that displays real-time language translations for in-game elements with interactive Spanish audio support and a flashcard-based learning system.
 
 ## Technical Details
 
@@ -16,19 +16,28 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
 1. **Translation System**
    - Loads translation files from `translation_keys/1.16.5/` directory
    - Supports English (`en_us.json`) and Spanish (`es_mx.json`)
-   - Enhanced block data from `minecraft_blocks_mod_data.json` with descriptions
    - Uses Gson for JSON parsing with UTF-8 encoding
    - Translation keys follow Minecraft's standard format (e.g., `block.minecraft.stone`)
+   - All translations loaded from standard language files only
 
 2. **Progress Tracking System (`ProgressManager.java`)**
-   - Tracks discovered items, blocks, and biomes
-   - Saves progress to `language_progress.json`
-   - Presents items in sequential order from the data file
-   - Supports skipping items (moved to end of queue)
-   - Displays current target item with Spanish description
-   - Shows progress counter (X/Y items discovered)
+   - Tracks discovered items, blocks, biomes, and entities
+   - Saves progress to `progress_tracker.json`
+   - Manages flashcard data and spaced repetition
+   - Tracks mastery status (5 correct answers = mastered)
+   - Handles welcome message preferences
+   - No target system - all items discovered organically
 
-3. **Audio System (`AudioManager.java`)**
+3. **Flashcard System (`FlashcardManager.java`)**
+   - Interactive quiz system in chat
+   - Bidirectional questions (English→Spanish or Spanish→English)
+   - Fuzzy matching with Levenshtein distance
+   - Accent-insensitive matching (é = e)
+   - Case-insensitive answers
+   - Retry mechanism for incorrect answers
+   - Mastery notification after 5 correct answers
+
+4. **Audio System (`AudioManager.java`)**
    - Direct file loading - no mapping file needed
    - Supports both MP3 and OGG formats (prefers OGG)
    - Audio files named with translation keys (e.g., `block.minecraft.stone.mp3`)
@@ -37,35 +46,41 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
    - Asynchronous playback to prevent game freezing
    - Playback speed control via `/slow` command
 
-4. **Input Handler (`KeyInputHandler.java`)**
+5. **Input Handler (`KeyInputHandler.java`)**
    - Single F key with smart priority system:
      - If looking at block/entity → speak that
      - If not looking but holding item → speak item
      - If neither → speak current biome
-   - Marks items/biomes as discovered (not entities)
+   - Marks items/biomes/entities as discovered
+   - No discovery messages shown
    - Generates appropriate translation keys
 
-5. **Command System (`LanguageCommands.java`)**
-   - `/hint` - Shows English description of current target item
-   - `/skip` - Moves current target to end of queue
+6. **Command System (`LanguageCommands.java`)**
+   - `/languagehelp` - Shows all available commands
+   - `/progress` - Shows discovery and mastery statistics
+   - `/flashcard` - Manually trigger a flashcard
    - `/slow` - Check current playback speed
    - `/slow <0.25-2.0>` - Set audio playback speed
    - `/testaudio <key>` - Test audio for specific translation key
+   - `/languagetoggle` - Toggle welcome message on/off
+   - `/hint` and `/skip` - Deprecated commands
 
-6. **HUD Overlay Renderer**
-   - Shows progress (X/Y items discovered)
-   - Displays current target item with Spanish description
-   - Shows player position, biome, and what they're looking at
-   - Real-time updates with color-coded information
-   - Word-wrapped Spanish descriptions
+7. **HUD Overlay Renderer**
+   - Shows position, biome, looking at, and holding information
+   - Spanish translations shown in white, English in gray
+   - Text with shadow for better readability
+   - Section headers always visible (no flashing)
+   - Gold headers for visual organization
+   - Clean spacing between sections
 
 ### Learning System Features
-- **Gamified Collection**: Players must discover all items/biomes
-- **Achievement Messages**: "¡Descubrimiento!" notifications in chat
-- **Sequential Targets**: Items presented in order from data file
-- **Skip System**: Can skip difficult items for later
+- **Discovery System**: Press F to discover and hear items
+- **Flashcard Timing**: 
+  - Initial flashcard when discovering (if 5+ min since last correct answer)
+  - Periodic flashcards every 5 minutes for discovered items
+- **Mastery System**: 5 correct flashcard answers = mastered
 - **Progress Persistence**: Saves between game sessions
-- **Spanish Descriptions**: Detailed descriptions for learning context
+- **No Spanish Descriptions**: Clean, simple interface
 
 ### Audio Implementation
 - **Audio Files**: 4,800+ audio files in `audio/es_mx/` directory
@@ -81,36 +96,50 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
 ### Data Files
 - **en_us.json**: English translations for all game elements
 - **es_mx.json**: Spanish translations (includes entity names)
-- **minecraft_blocks_mod_data.json**: Enhanced data with:
-  - Spanish/English names
-  - Obtainment tags
-  - Primary use categories
-  - Detailed descriptions in both languages
-- **language_progress.json**: Player progress tracking
+- **progress_tracker.json**: Player progress and flashcard tracking
+  - Discovered items with timestamps
+  - Flashcard attempt counts
+  - Correct answer counts
+  - Mastery status
+  - User preferences
 
 ### Usage Flow
-1. Player sees current target item in HUD with Spanish description
-2. Player obtains item and presses F while holding it
+1. Player explores world normally
+2. Player presses F while looking at/holding something
 3. Audio plays Spanish pronunciation
-4. Achievement message appears
-5. Progress updates and next target appears
-6. Use `/hint` for help or `/skip` to defer items
+4. Item marked as discovered (silently)
+5. Flashcard may appear (based on timing)
+6. Player answers flashcards to build mastery
+7. After 5 correct answers, mastery message appears
 
 ### Key Classes
 - `LanguageDisplayMod`: Main mod class, manages translations and overlay
 - `AudioManager`: Handles audio playback with multiple fallback methods
 - `KeyInputHandler`: Processes F key with smart priority detection
-- `ProgressManager`: Tracks learning progress and manages targets
-- `LanguageCommands`: Implements hint, skip, and audio commands
+- `ProgressManager`: Tracks learning progress and flashcard data
+- `FlashcardManager`: Interactive quiz system with fuzzy matching
+- `LanguageCommands`: Implements all slash commands
 
 ### Current Status
-- ✅ Full translation system with 900+ items
+- ✅ Full translation system with 5000+ items
 - ✅ Progress tracking and persistence
-- ✅ Achievement notifications
+- ✅ Flashcard system with fuzzy matching
+- ✅ Mastery notifications
 - ✅ Audio playback (best with VLC or OGG files)
-- ✅ Command system for hints and skipping
+- ✅ Command system for progress and settings
 - ✅ Entity translations included
 - ✅ UTF-8 support for proper Spanish characters
+- ✅ Clean HUD without flashing
+
+### Recent Changes
+- Removed all discovery messages (only mastery messages remain)
+- Removed Spanish descriptions from HUD
+- Fixed text encoding issues (removed special quotes and ¡ characters)
+- Added persistent section headers to prevent flashing
+- Implemented flashcard timing logic (5-minute cooldown after correct answer)
+- Added shadow to all HUD text for better readability
+- Simplified welcome message
+- Updated command system with /languagehelp and /progress
 
 ### Known Limitations
 - MP3 playback requires VLC for best results

@@ -1,59 +1,63 @@
 # Minecraft Language Learning Mod
 
-A Minecraft Forge mod for version 1.16.5 that helps players learn Spanish through immersive gameplay with real-time translations, audio pronunciations, and a gamified collection system.
+A Minecraft Forge mod for version 1.16.5 that helps players learn Spanish through immersive gameplay with real-time translations, audio pronunciations, and a flashcard-based learning system.
 
 ## Features
 
 ### Visual Display
 The mod shows clean, minimal information in the top-left corner:
-- **Progress**: Track discovered items (X/915 items)
-- **Target**: Current item to find with Spanish description
 - **Position**: Your current coordinates
-- **Biome**: Current biome with English and Spanish translations
+- **Biome**: Current biome with Spanish and English translations
 - **Looking At**: Block or entity you're targeting with translations
 - **Holding**: Item in your main hand with translations
 
 ### Learning System
-- **Gamified Collection**: Discover all 915+ items in Minecraft
-- **Achievement Messages**: "¡Descubrimiento!" notifications when you learn new words
-- **Sequential Targets**: Items presented in order with Spanish descriptions
+- **Discovery System**: Look at blocks, entities, items, or biomes and press F to discover them
+- **Flashcard Quizzes**: Test your knowledge with Spanish-English translation questions
+- **Spaced Repetition**: Flashcards appear when discovering items and periodically every 5 minutes
+- **Mastery Tracking**: Master items by correctly answering their flashcard 5 times
 - **Progress Tracking**: Saves your progress between sessions
 
 ### Audio Support
-- Press **F** to hear Spanish pronunciation and mark items as discovered
+- Press **F** to hear Spanish pronunciation
 - Smart priority: looks at block/entity first, then held item, then biome
 - Over 4,800 audio files covering blocks, items, entities, and biomes
 - Adjustable playback speed with `/slow` command
 
 ### Commands
-- **/hint**: Shows English description of current target item
-- **/skip**: Moves current target to end of queue
+- **/languagehelp**: Shows all available commands
+- **/progress**: View your discovery and mastery statistics
+- **/flashcard**: Manually trigger a flashcard quiz
 - **/slow**: Check current audio playback speed
 - **/slow <0.25-2.0>**: Set audio playback speed
 - **/testaudio <key>**: Test audio for specific translation key
+- **/languagetoggle**: Toggle welcome message on/off
 
 ## Example Display
 
 ```
-Progress: 45/915 items
-Target: Piedra (Stone)
-Piedra, se encuentra en biomas subterráneos y de
-montañas y se recolecta con cualquier pico.
-
 Position: 150, 64, -200
 
 Biome:
-  EN: Forest
-  ES: Bosque
+  Bosque
+  Forest
 
 Looking At:
-  EN: Stone
-  ES: Piedra
+  Piedra
+  Stone
 
 Holding:
-  EN: Diamond Pickaxe
-  ES: Pico de Diamante
+  Pico de Diamante
+  Diamond Pickaxe
 ```
+
+## Flashcard System
+
+When you receive a flashcard, type your answer in chat:
+- Questions can be English→Spanish or Spanish→English
+- Fuzzy matching allows minor typos
+- Spanish special characters (é, ñ, etc.) are optional
+- After 5 correct answers, the item is mastered
 
 ## Requirements
 
@@ -74,12 +78,12 @@ Holding:
 
 ## Controls
 
-- **F Key**: Play Spanish audio and mark items/biomes as discovered
+- **F Key**: Discover and hear Spanish pronunciation for what you're looking at
 
 ## Languages Supported
 
 - English (en_us)
-- Spanish (es_mx) with full audio pronunciation and descriptions
+- Spanish (es_mx) with full audio pronunciation
 
 ## Building from Source
 
@@ -101,15 +105,15 @@ Holding:
 - **LanguageDisplayMod.java**: Main mod class that initializes the mod, loads translations, and manages the HUD overlay renderer.
 - **AudioManager.java**: Handles audio file playback with VLC integration and multiple fallback methods for cross-platform support.
 - **KeyInputHandler.java**: Processes the F key input with smart priority detection for blocks, entities, items, and biomes.
-- **ProgressManager.java**: Tracks player's learning progress, manages target items, and handles save/load of progress data.
-- **LanguageCommands.java**: Implements slash commands for hints, skipping items, and adjusting audio playback speed.
+- **ProgressManager.java**: Tracks player's learning progress, flashcard data, and handles save/load of progress.
+- **FlashcardManager.java**: Manages flashcard quizzes with fuzzy matching for answers.
+- **LanguageCommands.java**: Implements slash commands for progress, flashcards, and settings.
 
 ## Data Files
 
 - **en_us.json**: English translations for all Minecraft elements
 - **es_mx.json**: Spanish translations including entity names
-- **minecraft_blocks_mod_data.json**: Enhanced item data with descriptions and metadata
-- **language_progress.json**: Automatically created to track your progress
+- **progress_tracker.json**: Automatically created to track your progress and flashcard data
 
 ## Audio Files
 

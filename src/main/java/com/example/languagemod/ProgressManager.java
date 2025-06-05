@@ -5,12 +5,12 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonArray;
 import net.minecraft.client.Minecraft;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -20,108 +20,113 @@ import java.util.*;
 
 public class ProgressManager {
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final String PROGRESS_FILE = "C:/Users/benau/forge_language_mod_1.16.5/language_progress.json";
-    private static final String BLOCKS_DATA_FILE = "C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/minecraft_blocks_mod_data.json";
+    private static final String PROGRESS_FILE = "C:/Users/benau/forge_language_mod_1.16.5/progress_tracker.json";
+    private static final String EN_US_FILE = "C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/en_us.json";
+    private static final String ES_MX_FILE = "C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/es_mx.json";
     
     private final Map<String, ProgressEntry> progressMap = new HashMap<>();
-    private final List<String> itemOrder = new ArrayList<>();
-    private final Map<String, BlockData> blockDataMap = new HashMap<>();
-    private final List<String> skippedItems = new ArrayList<>();
-    private String currentTargetItem = null;
+    private final Map<String, String> englishTranslations = new HashMap<>();
+    private final Map<String, String> spanishTranslations = new HashMap<>();
+    private long lastFlashcardTime = 0;
+    private static final long FLASHCARD_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+    private boolean welcomeMessageEnabled = true;
+    private long lastCorrectFlashcardTime = 0;
     
     public static class ProgressEntry {
         public boolean discovered;
         public long discoveredTime;
-        public boolean skipped;
+        public int correctCount;
+        public int attemptCount;
+        public long lastAttemptTime;
+        public boolean mastered;
         
         public ProgressEntry() {
             this.discovered = false;
             this.discoveredTime = 0;
-            this.skipped = false;
+            this.correctCount = 0;
+            this.attemptCount = 0;
+            this.lastAttemptTime = 0;
+            this.mastered = false;
         }
     }
     
-    public static class BlockData {
-        public String spanish_name;
-        public String english_name;
-        public String obtainment_tag;
-        public String primary_use;
-        public String description_spanish;
-        public String description_english;
-    }
-    
     public ProgressManager() {
-        loadBlockData();
+        loadTranslations();
         loadProgress();
-        updateCurrentTarget();
+        lastFlashcardTime = System.currentTimeMillis();
     }
     
-    private void loadBlockData() {
-        try (java.io.InputStreamReader reader = new java.io.InputStreamReader(
-                new java.io.FileInputStream(BLOCKS_DATA_FILE), java.nio.charset.StandardCharsets.UTF_8)) {
-            JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
-            
-            for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                String key = entry.getKey();
-                JsonObject data = entry.getValue().getAsJsonObject();
-                
-                BlockData blockData = new BlockData();
-                blockData.spanish_name = data.get("spanish_name").getAsString();
-                blockData.english_name = data.get("english_name").getAsString();
-                blockData.obtainment_tag = data.get("obtainment_tag").getAsString();
-                blockData.primary_use = data.get("primary_use").getAsString();
-                blockData.description_spanish = data.get("description_spanish").getAsString();
-                blockData.description_english = data.get("description_english").getAsString();
-                
-                blockDataMap.put(key, blockData);
-                itemOrder.add(key);
+    private void loadTranslations() {
+        try {
+            // Load English translations
+            try (InputStreamReader reader = new InputStreamReader(
+                    new java.io.FileInputStream(EN_US_FILE), StandardCharsets.UTF_8)) {
+                JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
+                for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                    englishTranslations.put(entry.getKey(), entry.getValue().getAsString());
+                }
             }
             
-            LOGGER.info("Loaded {} items from blocks data file", blockDataMap.size());
+            // Load Spanish translations
+            try (InputStreamReader reader = new InputStreamReader(
+                    new java.io.FileInputStream(ES_MX_FILE), StandardCharsets.UTF_8)) {
+                JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
+                for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                    spanishTranslations.put(entry.getKey(), entry.getValue().getAsString());
+                }
+            }
+            
+            LOGGER.info("Loaded {} English and {} Spanish translations", 
+                       englishTranslations.size(), spanishTranslations.size());
+            
+            // Initialize progress entries for all translation keys
+            Set<String> allKeys = new HashSet<>();
+            allKeys.addAll(englishTranslations.keySet());
+            allKeys.addAll(spanishTranslations.keySet());
+            
+            for (String key : allKeys) {
+                progressMap.putIfAbsent(key, new ProgressEntry());
+            }
+            
         } catch (Exception e) {
-            LOGGER.error("Failed to load blocks data file", e);
+            LOGGER.error("Failed to load translation files", e);
         }
     }
     
     private void loadProgress() {
         File file = new File(PROGRESS_FILE);
         if (!file.exists()) {
-            // Initialize progress for all items
-            for (String key : itemOrder) {
-                progressMap.put(key, new ProgressEntry());
-            }
             saveProgress();
             return;
         }
         
-        try (java.io.InputStreamReader reader = new java.io.InputStreamReader(
-                new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8)) {
+        try (InputStreamReader reader = new InputStreamReader(
+                new java.io.FileInputStream(file), StandardCharsets.UTF_8)) {
             JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
             
-            // Load progress entries
             if (jsonObject.has("progress")) {
                 JsonObject progress = jsonObject.getAsJsonObject("progress");
                 for (Map.Entry<String, JsonElement> entry : progress.entrySet()) {
                     String key = entry.getKey();
                     JsonObject data = entry.getValue().getAsJsonObject();
                     
-                    ProgressEntry progressEntry = new ProgressEntry();
+                    ProgressEntry progressEntry = progressMap.getOrDefault(key, new ProgressEntry());
                     progressEntry.discovered = data.get("discovered").getAsBoolean();
                     progressEntry.discoveredTime = data.get("discoveredTime").getAsLong();
-                    progressEntry.skipped = data.get("skipped").getAsBoolean();
+                    progressEntry.correctCount = data.has("correctCount") ? data.get("correctCount").getAsInt() : 0;
+                    progressEntry.attemptCount = data.has("attemptCount") ? data.get("attemptCount").getAsInt() : 0;
+                    progressEntry.lastAttemptTime = data.has("lastAttemptTime") ? data.get("lastAttemptTime").getAsLong() : 0;
+                    progressEntry.mastered = data.has("mastered") ? data.get("mastered").getAsBoolean() : false;
                     
                     progressMap.put(key, progressEntry);
-                    
-                    if (progressEntry.skipped && !progressEntry.discovered) {
-                        skippedItems.add(key);
-                    }
                 }
             }
             
-            // Ensure all items have progress entries
-            for (String key : itemOrder) {
-                if (!progressMap.containsKey(key)) {
-                    progressMap.put(key, new ProgressEntry());
+            // Load preferences
+            if (jsonObject.has("preferences")) {
+                JsonObject prefs = jsonObject.getAsJsonObject("preferences");
+                if (prefs.has("welcomeMessageEnabled")) {
+                    welcomeMessageEnabled = prefs.get("welcomeMessageEnabled").getAsBoolean();
                 }
             }
             
@@ -140,11 +145,19 @@ public class ProgressManager {
                 JsonObject data = new JsonObject();
                 data.addProperty("discovered", entry.getValue().discovered);
                 data.addProperty("discoveredTime", entry.getValue().discoveredTime);
-                data.addProperty("skipped", entry.getValue().skipped);
+                data.addProperty("correctCount", entry.getValue().correctCount);
+                data.addProperty("attemptCount", entry.getValue().attemptCount);
+                data.addProperty("lastAttemptTime", entry.getValue().lastAttemptTime);
+                data.addProperty("mastered", entry.getValue().mastered);
                 progress.add(entry.getKey(), data);
             }
             
             root.add("progress", progress);
+            
+            // Save preferences
+            JsonObject prefs = new JsonObject();
+            prefs.addProperty("welcomeMessageEnabled", welcomeMessageEnabled);
+            root.add("preferences", prefs);
             
             // Create directory if it doesn't exist
             File file = new File(PROGRESS_FILE);
@@ -165,95 +178,101 @@ public class ProgressManager {
         if (entry != null && !entry.discovered) {
             entry.discovered = true;
             entry.discoveredTime = System.currentTimeMillis();
-            entry.skipped = false;
-            skippedItems.remove(key);
             saveProgress();
-            updateCurrentTarget();
             LOGGER.info("Marked {} as discovered", key);
             
-            // Log progress statistics
-            int discovered = getDiscoveredCount();
-            int total = getTotalItemCount();
-            LOGGER.info("Progress: {}/{} items discovered ({}%)", discovered, total, (discovered * 100) / total);
-        } else if (entry == null) {
-            LOGGER.warn("No progress entry found for key: {}", key);
-        } else {
-            LOGGER.info("Item {} was already discovered", key);
+            // Show flashcard if enough time has passed since last correct answer
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastCorrectFlashcardTime >= FLASHCARD_INTERVAL) {
+                showInitialFlashcard(key);
+            }
         }
     }
     
     public void markBiomeDiscovered(String biomeKey) {
-        // For biomes, we'll track them separately
         String key = "biome." + biomeKey.replace(":", ".");
-        ProgressEntry entry = progressMap.computeIfAbsent(key, k -> new ProgressEntry());
-        if (!entry.discovered) {
-            entry.discovered = true;
-            entry.discoveredTime = System.currentTimeMillis();
+        markItemDiscovered(key);
+    }
+    
+    public void markEntityDiscovered(String entityKey) {
+        markItemDiscovered(entityKey);
+    }
+    
+    private void showInitialFlashcard(String key) {
+        String english = englishTranslations.get(key);
+        String spanish = spanishTranslations.get(key);
+        
+        if (english != null && spanish != null) {
+            FlashcardManager.getInstance().showFlashcard(key, english, spanish, true);
+        }
+    }
+    
+    public void checkAndShowFlashcard() {
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastFlashcardTime >= FLASHCARD_INTERVAL) {
+            lastFlashcardTime = currentTime;
+            showRandomFlashcard();
+        }
+    }
+    
+    public void showRandomFlashcard() {
+        // Get all discovered but not mastered items
+        List<String> eligibleKeys = new ArrayList<>();
+        for (Map.Entry<String, ProgressEntry> entry : progressMap.entrySet()) {
+            if (entry.getValue().discovered && !entry.getValue().mastered) {
+                eligibleKeys.add(entry.getKey());
+            }
+        }
+        
+        if (eligibleKeys.isEmpty()) {
+            return;
+        }
+        
+        // Pick a random key
+        Random random = new Random();
+        String key = eligibleKeys.get(random.nextInt(eligibleKeys.size()));
+        
+        String english = englishTranslations.get(key);
+        String spanish = spanishTranslations.get(key);
+        
+        if (english != null && spanish != null) {
+            // Randomly decide whether to ask English->Spanish or Spanish->English
+            boolean askEnglishToSpanish = random.nextBoolean();
+            FlashcardManager.getInstance().showFlashcard(key, english, spanish, askEnglishToSpanish);
+        }
+    }
+    
+    public void recordFlashcardAttempt(String key, boolean correct) {
+        ProgressEntry entry = progressMap.get(key);
+        if (entry != null) {
+            entry.attemptCount++;
+            entry.lastAttemptTime = System.currentTimeMillis();
+            
+            if (correct) {
+                entry.correctCount++;
+                lastCorrectFlashcardTime = System.currentTimeMillis();
+                
+                if (entry.correctCount >= 5 && !entry.mastered) {
+                    entry.mastered = true;
+                    LOGGER.info("Item {} has been mastered!", key);
+                    
+                    // Show mastery message
+                    Minecraft mc = Minecraft.getInstance();
+                    if (mc.player != null) {
+                        String spanishName = spanishTranslations.get(key);
+                        mc.player.displayClientMessage(
+                            new net.minecraft.util.text.StringTextComponent("Mastered: ")
+                                .withStyle(net.minecraft.util.text.TextFormatting.GOLD, net.minecraft.util.text.TextFormatting.BOLD)
+                                .append(new net.minecraft.util.text.StringTextComponent(spanishName)
+                                    .withStyle(net.minecraft.util.text.TextFormatting.YELLOW)),
+                            false
+                        );
+                    }
+                }
+            }
+            
             saveProgress();
-            LOGGER.info("Marked biome {} as discovered", key);
         }
-    }
-    
-    public void skipCurrentItem() {
-        if (currentTargetItem != null) {
-            ProgressEntry entry = progressMap.get(currentTargetItem);
-            if (entry != null && !entry.discovered) {
-                entry.skipped = true;
-                if (!skippedItems.contains(currentTargetItem)) {
-                    skippedItems.add(currentTargetItem);
-                }
-                saveProgress();
-                updateCurrentTarget();
-                LOGGER.info("Skipped item: {}", currentTargetItem);
-            }
-        }
-    }
-    
-    private void updateCurrentTarget() {
-        currentTargetItem = null;
-        
-        // First, try to find the next undiscovered item in order
-        for (String key : itemOrder) {
-            ProgressEntry entry = progressMap.get(key);
-            if (entry != null && !entry.discovered && !entry.skipped) {
-                currentTargetItem = key;
-                break;
-            }
-        }
-        
-        // If all non-skipped items are discovered, work on skipped items
-        if (currentTargetItem == null && !skippedItems.isEmpty()) {
-            for (String key : skippedItems) {
-                ProgressEntry entry = progressMap.get(key);
-                if (entry != null && !entry.discovered) {
-                    currentTargetItem = key;
-                    break;
-                }
-            }
-        }
-    }
-    
-    public String getCurrentTargetItem() {
-        return currentTargetItem;
-    }
-    
-    public BlockData getCurrentTargetData() {
-        if (currentTargetItem != null) {
-            return blockDataMap.get(currentTargetItem);
-        }
-        return null;
-    }
-    
-    public BlockData getBlockData(String key) {
-        return blockDataMap.get(key);
-    }
-    
-    public String getCurrentTargetHint() {
-        BlockData data = getCurrentTargetData();
-        if (data != null) {
-            return data.description_english;
-        }
-        return "No current target item";
     }
     
     public int getDiscoveredCount() {
@@ -263,7 +282,13 @@ public class ProgressManager {
     }
     
     public int getTotalItemCount() {
-        return itemOrder.size();
+        return progressMap.size();
+    }
+    
+    public int getMasteredCount() {
+        return (int) progressMap.values().stream()
+                .filter(entry -> entry.mastered)
+                .count();
     }
     
     public int getDiscoveredBiomeCount() {
@@ -279,7 +304,23 @@ public class ProgressManager {
     
     public boolean isBiomeDiscovered(String biomeKey) {
         String key = "biome." + biomeKey.replace(":", ".");
-        ProgressEntry entry = progressMap.get(key);
-        return entry != null && entry.discovered;
+        return isItemDiscovered(key);
+    }
+    
+    public String getEnglishTranslation(String key) {
+        return englishTranslations.getOrDefault(key, key);
+    }
+    
+    public String getSpanishTranslation(String key) {
+        return spanishTranslations.getOrDefault(key, key);
+    }
+    
+    public boolean isWelcomeMessageEnabled() {
+        return welcomeMessageEnabled;
+    }
+    
+    public void setWelcomeMessageEnabled(boolean enabled) {
+        welcomeMessageEnabled = enabled;
+        saveProgress();
     }
 }
