@@ -2,8 +2,10 @@ package com.example.languagemod;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandSource;
 import net.minecraft.command.Commands;
+import net.minecraft.util.SoundEvents;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -200,7 +202,22 @@ public class LanguageCommands {
                         false
                     );
                     context.getSource().sendSuccess(
+                        new StringTextComponent("/flashcardtime [minutes] - Set flashcard interval (1-120 min)")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
                         new StringTextComponent("/languagehelp - Show this help message")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/testvanilla - Test vanilla Minecraft sounds")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    context.getSource().sendSuccess(
+                        new StringTextComponent("/debugsound <key> - Debug specific sound")
                             .withStyle(TextFormatting.YELLOW),
                         false
                     );
@@ -223,6 +240,161 @@ public class LanguageCommands {
                     return 1;
                 });
         
+        // Register /flashcardtime command to set flashcard interval
+        LiteralArgumentBuilder<CommandSource> flashcardTimeCommand = Commands.literal("flashcardtime")
+                .then(Commands.argument("minutes", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 120))
+                    .executes(context -> {
+                        int minutes = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "minutes");
+                        if (progressManager != null) {
+                            progressManager.setFlashcardIntervalMinutes(minutes);
+                            context.getSource().sendSuccess(
+                                new StringTextComponent("Flashcard interval set to ")
+                                    .withStyle(TextFormatting.GREEN)
+                                    .append(new StringTextComponent(minutes + " minutes")
+                                        .withStyle(TextFormatting.WHITE)),
+                                false
+                            );
+                        } else {
+                            context.getSource().sendFailure(
+                                new StringTextComponent("Progress system not initialized!")
+                                    .withStyle(TextFormatting.RED)
+                            );
+                        }
+                        return 1;
+                    }))
+                .executes(context -> {
+                    // No argument provided, show current interval
+                    if (progressManager != null) {
+                        long currentMinutes = progressManager.getFlashcardIntervalMinutes();
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Current flashcard interval: ")
+                                .withStyle(TextFormatting.YELLOW)
+                                .append(new StringTextComponent(currentMinutes + " minutes")
+                                    .withStyle(TextFormatting.WHITE))
+                                .append(new StringTextComponent(" (use /flashcardtime <1-120> to change)")
+                                    .withStyle(TextFormatting.GRAY)),
+                            false
+                        );
+                    } else {
+                        context.getSource().sendFailure(
+                            new StringTextComponent("Progress system not initialized!")
+                                .withStyle(TextFormatting.RED)
+                        );
+                    }
+                    return 1;
+                });
+        
+        // Test vanilla sound command
+        LiteralArgumentBuilder<CommandSource> testVanillaCommand = Commands.literal("testvanilla")
+                .executes(context -> {
+                    try {
+                        Minecraft mc = Minecraft.getInstance();
+                        if (mc.player != null) {
+                            // Play a vanilla note block sound to verify sound system works
+                            mc.player.playSound(SoundEvents.NOTE_BLOCK_BELL, 1.0f, 1.0f);
+                            context.getSource().sendSuccess(
+                                new StringTextComponent("Playing vanilla bell sound. Did you hear it?")
+                                    .withStyle(TextFormatting.YELLOW),
+                                false
+                            );
+                        }
+                    } catch (Exception e) {
+                        context.getSource().sendFailure(
+                            new StringTextComponent("Error: " + e.getMessage())
+                                .withStyle(TextFormatting.RED)
+                        );
+                    }
+                    return 1;
+                });
+        
+        // Debug sound command
+        LiteralArgumentBuilder<CommandSource> debugSoundCommand = Commands.literal("debugsound")
+                .then(Commands.argument("key", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .executes(context -> {
+                        String key = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "key");
+                        
+                        // Get the sound event
+                        net.minecraft.util.SoundEvent soundEvent = ModSounds.getSoundEvent(key);
+                        if (soundEvent == null) {
+                            context.getSource().sendFailure(
+                                new StringTextComponent("Sound not registered for key: " + key)
+                                    .withStyle(TextFormatting.RED)
+                            );
+                            return 1;
+                        }
+                        
+                        // Debug info
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("=== Sound Debug Info ===")
+                                .withStyle(TextFormatting.GOLD),
+                            false
+                        );
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Translation key: " + key)
+                                .withStyle(TextFormatting.YELLOW),
+                            false
+                        );
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Sound location: " + soundEvent.getLocation())
+                                .withStyle(TextFormatting.YELLOW),
+                            false
+                        );
+                        context.getSource().sendSuccess(
+                            new StringTextComponent("Expected file: sounds/es_mx/" + key + ".ogg")
+                                .withStyle(TextFormatting.YELLOW),
+                            false
+                        );
+                        
+                        // Try to play it directly
+                        Minecraft mc = Minecraft.getInstance();
+                        if (mc.player != null && mc.level != null) {
+                            mc.level.playSound(mc.player, mc.player.blockPosition(), soundEvent, 
+                                net.minecraft.util.SoundCategory.RECORDS, 1.0f, 1.0f);
+                            context.getSource().sendSuccess(
+                                new StringTextComponent("Attempted to play sound using World.playSound")
+                                    .withStyle(TextFormatting.GREEN),
+                                false
+                            );
+                        }
+                        
+                        return 1;
+                    }));
+        
+        // Check resource command
+        LiteralArgumentBuilder<CommandSource> checkResourceCommand = Commands.literal("checkresource")
+                .then(Commands.argument("key", com.mojang.brigadier.arguments.StringArgumentType.string())
+                    .executes(context -> {
+                        String key = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "key");
+                        
+                        // Check if the OGG file exists as a resource
+                        String resourcePath = "/assets/languagemod/sounds/es_mx/" + key + ".ogg";
+                        java.io.InputStream stream = LanguageDisplayMod.class.getResourceAsStream(resourcePath);
+                        
+                        if (stream != null) {
+                            try {
+                                int size = stream.available();
+                                stream.close();
+                                context.getSource().sendSuccess(
+                                    new StringTextComponent("Resource found: " + resourcePath + " (Size: " + size + " bytes)")
+                                        .withStyle(TextFormatting.GREEN),
+                                    false
+                                );
+                            } catch (Exception e) {
+                                context.getSource().sendFailure(
+                                    new StringTextComponent("Error reading resource: " + e.getMessage())
+                                        .withStyle(TextFormatting.RED)
+                                );
+                            }
+                        } else {
+                            context.getSource().sendFailure(
+                                new StringTextComponent("Resource NOT found: " + resourcePath)
+                                    .withStyle(TextFormatting.RED)
+                            );
+                        }
+                        
+                        return 1;
+                    }));
+        
         dispatcher.register(hintCommand);
         dispatcher.register(skipCommand);
         dispatcher.register(slowCommand);
@@ -231,6 +403,10 @@ public class LanguageCommands {
         dispatcher.register(progressCommand);
         dispatcher.register(helpCommand);
         dispatcher.register(toggleCommand);
+        dispatcher.register(flashcardTimeCommand);
+        dispatcher.register(testVanillaCommand);
+        dispatcher.register(debugSoundCommand);
+        dispatcher.register(checkResourceCommand);
         
         LOGGER.info("Language commands registered");
     }

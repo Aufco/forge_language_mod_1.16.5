@@ -36,7 +36,8 @@ public class FlashcardManager {
     
     public void showFlashcard(String key, String english, String spanish, boolean englishToSpanish) {
         if (waitingForAnswer) {
-            return; // Don't show a new flashcard if we're waiting for an answer
+            // Cancel the current flashcard to allow new ones (discovery flashcards should take priority)
+            cancelCurrentFlashcard();
         }
         
         currentFlashcardKey = key;
@@ -94,7 +95,7 @@ public class FlashcardManager {
             mc.player.displayClientMessage(
                 new StringTextComponent("[CORRECT] ")
                     .withStyle(TextFormatting.GREEN, TextFormatting.BOLD)
-                    .append(new StringTextComponent("Correct! The answer is \"" + expectedAnswer + "\"")
+                    .append(new StringTextComponent("The answer is \"" + expectedAnswer + "\"")
                         .withStyle(TextFormatting.GREEN)),
                 false
             );
@@ -114,7 +115,7 @@ public class FlashcardManager {
             mc.player.displayClientMessage(
                 new StringTextComponent("[INCORRECT] ")
                     .withStyle(TextFormatting.RED, TextFormatting.BOLD)
-                    .append(new StringTextComponent("Not quite! The answer is \"" + expectedAnswer + "\". Try typing it again.")
+                    .append(new StringTextComponent("The answer is \"" + expectedAnswer + "\". Try again.")
                         .withStyle(TextFormatting.YELLOW)),
                 false
             );

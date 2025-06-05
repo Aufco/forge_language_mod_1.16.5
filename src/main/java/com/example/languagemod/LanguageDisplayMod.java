@@ -32,10 +32,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -55,6 +55,10 @@ public class LanguageDisplayMod {
         instance = this;
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::doClientStuff);
+        
+        // Register the sound events deferred register
+        ModSounds.SOUNDS.register(FMLJavaModLoadingContext.get().getModEventBus());
+        
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(new OverlayRenderer());
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
@@ -75,7 +79,11 @@ public class LanguageDisplayMod {
         LanguageCommands.setProgressManager(progressManager);
         
         // Initialize audio system
-        AudioManager.getInstance();
+        AudioManager audioManager = AudioManager.getInstance();
+        audioManager.registerAllSounds(englishTranslations);
+        
+        // Log how many sounds were registered
+        LOGGER.info("Total sounds registered: {}", ModSounds.getRegisteredSoundCount());
         
         // Register keybindings
         KeyInputHandler.register();
@@ -83,11 +91,8 @@ public class LanguageDisplayMod {
     
     private void loadTranslations() {
         try {
-            Path enPath = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/en_us.json");
-            Path esPath = Paths.get("C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/es_mx.json");
-            
-            englishTranslations = loadJsonTranslations(enPath.toString());
-            spanishTranslations = loadJsonTranslations(esPath.toString());
+            englishTranslations = loadJsonTranslationsFromResource("/assets/languagemod/lang/en_us.json");
+            spanishTranslations = loadJsonTranslationsFromResource("/assets/languagemod/lang/es_mx.json");
             
             LOGGER.info("Loaded {} English translations", englishTranslations.size());
             LOGGER.info("Loaded {} Spanish translations", spanishTranslations.size());
@@ -100,15 +105,22 @@ public class LanguageDisplayMod {
         }
     }
     
-    private Map<String, String> loadJsonTranslations(String filePath) {
+    private Map<String, String> loadJsonTranslationsFromResource(String resourcePath) {
         Map<String, String> translations = new HashMap<>();
-        try (BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(
-                new java.io.FileInputStream(filePath), java.nio.charset.StandardCharsets.UTF_8))) {
-            Gson gson = new Gson();
-            JsonObject json = gson.fromJson(reader, JsonObject.class);
-            json.entrySet().forEach(entry -> translations.put(entry.getKey(), entry.getValue().getAsString()));
+        try {
+            InputStream inputStream = getClass().getResourceAsStream(resourcePath);
+            if (inputStream == null) {
+                LOGGER.error("Could not find resource: " + resourcePath);
+                return translations;
+            }
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+                Gson gson = new Gson();
+                JsonObject json = gson.fromJson(reader, JsonObject.class);
+                json.entrySet().forEach(entry -> translations.put(entry.getKey(), entry.getValue().getAsString()));
+            }
         } catch (IOException e) {
-            LOGGER.error("Failed to load translations from: " + filePath, e);
+            LOGGER.error("Failed to load translations from resource: " + resourcePath, e);
         }
         return translations;
     }
@@ -148,25 +160,40 @@ public class LanguageDisplayMod {
     
     @SubscribeEvent
     public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (progressManager != null && progressManager.isWelcomeMessageEnabled()) {
-            // Send welcome messages with slight delay to ensure player is ready
-            Minecraft.getInstance().execute(() -> {
-                event.getPlayer().displayClientMessage(
-                    new StringTextComponent("=== Language Learning Mod ===")
-                        .withStyle(TextFormatting.GOLD, TextFormatting.BOLD),
-                    false
-                );
-                event.getPlayer().displayClientMessage(
-                    new StringTextComponent("Press F while looking at objects to learn Spanish!")
-                        .withStyle(TextFormatting.YELLOW),
-                    false
-                );
-                event.getPlayer().displayClientMessage(
-                    new StringTextComponent("Type /languagehelp for commands")
-                        .withStyle(TextFormatting.GREEN),
-                    false
-                );
-            });
+        if (progressManager != null) {
+            // Always show startup flashcard regardless of welcome message setting
+            if (progressManager.isWelcomeMessageEnabled()) {
+                // Send welcome messages with slight delay to ensure player is ready
+                Minecraft.getInstance().execute(() -> {
+                    event.getPlayer().displayClientMessage(
+                        new StringTextComponent("=== Language Learning Mod ===")
+                            .withStyle(TextFormatting.GOLD, TextFormatting.BOLD),
+                        false
+                    );
+                    event.getPlayer().displayClientMessage(
+                        new StringTextComponent("Press F while looking at objects to learn Spanish!")
+                            .withStyle(TextFormatting.YELLOW),
+                        false
+                    );
+                    event.getPlayer().displayClientMessage(
+                        new StringTextComponent("Type /languagehelp for commands")
+                            .withStyle(TextFormatting.GREEN),
+                        false
+                    );
+                });
+            }
+            
+            // Show startup flashcard after a short delay (regardless of welcome message setting)
+            new Thread(() -> {
+                try {
+                    Thread.sleep(3000); // 3 second delay
+                    Minecraft.getInstance().execute(() -> {
+                        progressManager.showStartupFlashcard();
+                    });
+                } catch (InterruptedException e) {
+                    // Handle interruption
+                }
+            }).start();
         }
     }
     
@@ -262,7 +289,12 @@ public class LanguageDisplayMod {
                 }
             }
             
-            // Add spacing regardless of whether we found a target
+            // Always maintain consistent spacing for Looking At section
+            if (!foundTarget) {
+                // Match the Y advancement of content case: only lineHeight (like Spanish text)
+                y += lineHeight; // Match what Spanish text would do
+            }
+            // Always use the same section spacing as biome section
             y += sectionSpacing;
             
             // Holding info - always show header
@@ -277,6 +309,10 @@ public class LanguageDisplayMod {
                 fontRenderer.drawShadow(matrixStack, "  " + spanishItem, x, y, 0xFFFFFF);
                 y += lineHeight;
                 fontRenderer.drawShadow(matrixStack, "  " + englishItem, x, y, 0xBBBBBB);
+            } else {
+                // Always maintain consistent spacing for Holding section
+                y += lineHeight; // Spanish line space
+                y += lineHeight; // English line space
             }
         }
     }

@@ -1,6 +1,6 @@
 # Minecraft Language Learning Mod
 
-A Minecraft Forge mod for version 1.16.5 that helps players learn Spanish through immersive gameplay with real-time translations, audio pronunciations, and a flashcard-based learning system.
+A Minecraft Forge mod for version 1.16.5 that helps players learn Spanish through immersive gameplay with real-time translations and a flashcard-based learning system.
 
 ## Features
 
@@ -18,20 +18,26 @@ The mod shows clean, minimal information in the top-left corner:
 - **Mastery Tracking**: Master items by correctly answering their flashcard 5 times
 - **Progress Tracking**: Saves your progress between sessions
 
-### Audio Support
-- Press **F** to hear Spanish pronunciation
+### Audio Support (Currently Non-Functional)
+- Press **F** to hear Spanish pronunciation (not working - see Known Issues)
 - Smart priority: looks at block/entity first, then held item, then biome
-- Over 4,800 audio files covering blocks, items, entities, and biomes
-- Adjustable playback speed with `/slow` command
+- 2,124 OGG audio files included but not playing
+- ⚠️ **Audio system is broken - focus on visual learning features**
 
 ### Commands
 - **/languagehelp**: Shows all available commands
 - **/progress**: View your discovery and mastery statistics
 - **/flashcard**: Manually trigger a flashcard quiz
-- **/slow**: Check current audio playback speed
-- **/slow <0.25-2.0>**: Set audio playback speed
-- **/testaudio <key>**: Test audio for specific translation key
+- **/slow**: Check current audio playback speed (non-functional)
+- **/slow <0.25-2.0>**: Set audio playback speed (non-functional)
+- **/testaudio <key>**: Test audio for specific translation key (confirms registration but no sound)
 - **/languagetoggle**: Toggle welcome message on/off
+- **/flashcardtime [minutes]**: Set flashcard interval (1-120 minutes)
+
+### Debug Commands
+- **/testvanilla**: Plays vanilla bell sound (works - confirms sound system is functional)
+- **/debugsound <key>**: Debug specific sound with multiple playback methods
+- **/checkresource <key>**: Verify if OGG file exists in mod resources
 
 ## Example Display
 
@@ -65,25 +71,24 @@ When you receive a flashcard, type your answer in chat:
 - Minecraft Forge 36.2.34 or higher
 - Java 8
 - Windows/Mac/Linux
-- (Recommended) VLC Media Player for MP3 audio support
 
 ## Installation
 
 1. Install Minecraft Forge for 1.16.5
 2. Download the mod JAR file
 3. Place the JAR file in your `.minecraft/mods` folder
-4. Ensure audio files are in `C:/Users/benau/forge_language_mod_1.16.5/audio/es_mx/`
-5. Translation files should be in `C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/`
-6. Launch Minecraft with the Forge profile
+4. Launch Minecraft with the Forge profile
+
+Note: All translations and audio files are bundled inside the mod JAR
 
 ## Controls
 
-- **F Key**: Discover and hear Spanish pronunciation for what you're looking at
+- **F Key**: Discover items and trigger (non-functional) Spanish pronunciation
 
 ## Languages Supported
 
 - English (en_us)
-- Spanish (es_mx) with full audio pronunciation
+- Spanish (es_mx) - visual translations work, audio does not
 
 ## Building from Source
 
@@ -98,36 +103,38 @@ When you receive a flashcard, type your answer in chat:
 3. Import the project into your IDE
 4. Run `./gradlew runClient` to test the mod
 
-## Source Files
+## Known Issues
 
-### Main Package (`com.example.languagemod`)
+### Critical: Audio Not Playing
+The mod's audio system is completely non-functional despite extensive debugging:
 
-- **LanguageDisplayMod.java**: Main mod class that initializes the mod, loads translations, and manages the HUD overlay renderer.
-- **AudioManager.java**: Handles audio file playback with VLC integration and multiple fallback methods for cross-platform support.
-- **KeyInputHandler.java**: Processes the F key input with smart priority detection for blocks, entities, items, and biomes.
-- **ProgressManager.java**: Tracks player's learning progress, flashcard data, and handles save/load of progress.
-- **FlashcardManager.java**: Manages flashcard quizzes with fuzzy matching for answers.
-- **LanguageCommands.java**: Implements slash commands for progress, flashcards, and settings.
+**Symptoms:**
+- All 2,124 sound events are registered successfully
+- OGG files are valid and playable outside Minecraft
+- Vanilla Minecraft sounds work (verified with /testvanilla)
+- No errors in logs, claims to play successfully
+- Multiple playback methods attempted (world.playSound, playLocalSound, SimpleSound)
+- All volume settings at 100%
 
-## Data Files
+**Debugging Attempted:**
+- Verified sounds.json has correct structure
+- Removed namespace prefixes from sound paths
+- Tested multiple sound categories (MASTER, RECORDS, BLOCKS)
+- Added resource verification commands
+- Tried different OGG encodings
 
-- **en_us.json**: English translations for all Minecraft elements
-- **es_mx.json**: Spanish translations including entity names
-- **progress_tracker.json**: Automatically created to track your progress and flashcard data
+**Root Cause:** Unknown - appears to be a fundamental incompatibility between the mod's sound loading and Minecraft/Forge's sound system. The visual learning features work perfectly, so the mod is still usable without audio.
 
-## Audio Files
+## Working Features
 
-The mod includes over 4,800 Spanish audio files located in `audio/es_mx/` covering:
-- All vanilla blocks
-- All vanilla items  
-- All vanilla entities
-- Biomes, advancements, and UI elements
-
-Audio files should be named with translation keys (e.g., `block.minecraft.stone.mp3` or `block.minecraft.stone.ogg`)
-
-## License
-
-All rights reserved
+Despite the audio issues, these features work perfectly:
+- ✅ Real-time translation overlay
+- ✅ Discovery system (F key)
+- ✅ Flashcard quizzes
+- ✅ Progress tracking and persistence
+- ✅ Mastery system
+- ✅ All commands except audio-related ones
+- ✅ 5000+ Spanish translations
 
 ## Author
 

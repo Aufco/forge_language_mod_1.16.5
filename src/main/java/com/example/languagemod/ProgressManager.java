@@ -14,23 +14,28 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import net.minecraftforge.fml.loading.FMLPaths;
 import java.util.*;
 
 public class ProgressManager {
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final String PROGRESS_FILE = "C:/Users/benau/forge_language_mod_1.16.5/progress_tracker.json";
-    private static final String EN_US_FILE = "C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/en_us.json";
-    private static final String ES_MX_FILE = "C:/Users/benau/forge_language_mod_1.16.5/translation_keys/1.16.5/es_mx.json";
+    private static final String PROGRESS_FILE_NAME = "languagemod_progress.json";
+    private static final String EN_US_RESOURCE = "/assets/languagemod/lang/en_us.json";
+    private static final String ES_MX_RESOURCE = "/assets/languagemod/lang/es_mx.json";
     
     private final Map<String, ProgressEntry> progressMap = new HashMap<>();
     private final Map<String, String> englishTranslations = new HashMap<>();
     private final Map<String, String> spanishTranslations = new HashMap<>();
     private long lastFlashcardTime = 0;
-    private static final long FLASHCARD_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+    private long flashcardInterval = 5 * 60 * 1000; // 5 minutes in milliseconds (configurable)
     private boolean welcomeMessageEnabled = true;
     private long lastCorrectFlashcardTime = 0;
+    private long lastFlashcardAnswerTime = 0; // Tracks any flashcard answer (correct or incorrect)
     
     public static class ProgressEntry {
         public boolean discovered;
@@ -58,23 +63,11 @@ public class ProgressManager {
     
     private void loadTranslations() {
         try {
-            // Load English translations
-            try (InputStreamReader reader = new InputStreamReader(
-                    new java.io.FileInputStream(EN_US_FILE), StandardCharsets.UTF_8)) {
-                JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
-                for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                    englishTranslations.put(entry.getKey(), entry.getValue().getAsString());
-                }
-            }
+            // Load English translations from resources
+            loadTranslationsFromResource(EN_US_RESOURCE, englishTranslations);
             
-            // Load Spanish translations
-            try (InputStreamReader reader = new InputStreamReader(
-                    new java.io.FileInputStream(ES_MX_FILE), StandardCharsets.UTF_8)) {
-                JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
-                for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-                    spanishTranslations.put(entry.getKey(), entry.getValue().getAsString());
-                }
-            }
+            // Load Spanish translations from resources
+            loadTranslationsFromResource(ES_MX_RESOURCE, spanishTranslations);
             
             LOGGER.info("Loaded {} English and {} Spanish translations", 
                        englishTranslations.size(), spanishTranslations.size());
@@ -93,8 +86,27 @@ public class ProgressManager {
         }
     }
     
+    private void loadTranslationsFromResource(String resourcePath, Map<String, String> targetMap) {
+        try {
+            InputStream inputStream = getClass().getResourceAsStream(resourcePath);
+            if (inputStream == null) {
+                LOGGER.error("Could not find resource: " + resourcePath);
+                return;
+            }
+            
+            try (InputStreamReader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
+                JsonObject jsonObject = new JsonParser().parse(reader).getAsJsonObject();
+                for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                    targetMap.put(entry.getKey(), entry.getValue().getAsString());
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load translations from resource: " + resourcePath, e);
+        }
+    }
+    
     private void loadProgress() {
-        File file = new File(PROGRESS_FILE);
+        File file = getProgressFile();
         if (!file.exists()) {
             saveProgress();
             return;
@@ -128,6 +140,12 @@ public class ProgressManager {
                 if (prefs.has("welcomeMessageEnabled")) {
                     welcomeMessageEnabled = prefs.get("welcomeMessageEnabled").getAsBoolean();
                 }
+                if (prefs.has("flashcardInterval")) {
+                    flashcardInterval = prefs.get("flashcardInterval").getAsLong();
+                }
+                if (prefs.has("lastFlashcardAnswerTime")) {
+                    lastFlashcardAnswerTime = prefs.get("lastFlashcardAnswerTime").getAsLong();
+                }
             }
             
             LOGGER.info("Loaded progress for {} items", progressMap.size());
@@ -157,10 +175,12 @@ public class ProgressManager {
             // Save preferences
             JsonObject prefs = new JsonObject();
             prefs.addProperty("welcomeMessageEnabled", welcomeMessageEnabled);
+            prefs.addProperty("flashcardInterval", flashcardInterval);
+            prefs.addProperty("lastFlashcardAnswerTime", lastFlashcardAnswerTime);
             root.add("preferences", prefs);
             
             // Create directory if it doesn't exist
-            File file = new File(PROGRESS_FILE);
+            File file = getProgressFile();
             file.getParentFile().mkdirs();
             
             try (FileWriter writer = new FileWriter(file)) {
@@ -173,6 +193,11 @@ public class ProgressManager {
         }
     }
     
+    private File getProgressFile() {
+        Path configDir = FMLPaths.CONFIGDIR.get();
+        return configDir.resolve(PROGRESS_FILE_NAME).toFile();
+    }
+    
     public void markItemDiscovered(String key) {
         ProgressEntry entry = progressMap.get(key);
         if (entry != null && !entry.discovered) {
@@ -181,10 +206,11 @@ public class ProgressManager {
             saveProgress();
             LOGGER.info("Marked {} as discovered", key);
             
-            // Show flashcard if enough time has passed since last correct answer
+            // Show flashcard for newly discovered items if no flashcard answered since startup or 5 minutes have passed
             long currentTime = System.currentTimeMillis();
-            if (currentTime - lastCorrectFlashcardTime >= FLASHCARD_INTERVAL) {
+            if (lastFlashcardAnswerTime == 0 || currentTime - lastFlashcardAnswerTime >= flashcardInterval) {
                 showInitialFlashcard(key);
+                resetFlashcardTimer();
             }
         }
     }
@@ -209,7 +235,7 @@ public class ProgressManager {
     
     public void checkAndShowFlashcard() {
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastFlashcardTime >= FLASHCARD_INTERVAL) {
+        if (currentTime - lastFlashcardTime >= flashcardInterval) {
             lastFlashcardTime = currentTime;
             showRandomFlashcard();
         }
@@ -248,6 +274,9 @@ public class ProgressManager {
             entry.attemptCount++;
             entry.lastAttemptTime = System.currentTimeMillis();
             
+            // Track that any flashcard was answered
+            lastFlashcardAnswerTime = System.currentTimeMillis();
+            
             if (correct) {
                 entry.correctCount++;
                 lastCorrectFlashcardTime = System.currentTimeMillis();
@@ -271,6 +300,8 @@ public class ProgressManager {
                 }
             }
             
+            // Reset the 5-minute timer whenever any flashcard is answered
+            resetFlashcardTimer();
             saveProgress();
         }
     }
@@ -322,5 +353,28 @@ public class ProgressManager {
     public void setWelcomeMessageEnabled(boolean enabled) {
         welcomeMessageEnabled = enabled;
         saveProgress();
+    }
+    
+    public long getFlashcardIntervalMinutes() {
+        return flashcardInterval / (60 * 1000);
+    }
+    
+    public void setFlashcardIntervalMinutes(int minutes) {
+        if (minutes >= 1 && minutes <= 120) { // Allow 1-120 minutes
+            flashcardInterval = minutes * 60 * 1000L;
+            saveProgress();
+        }
+    }
+    
+    public void resetFlashcardTimer() {
+        lastFlashcardTime = System.currentTimeMillis();
+    }
+    
+    public void showStartupFlashcard() {
+        // Reset timer to 0 when joining world (as per requirements)
+        lastFlashcardAnswerTime = 0;
+        // Show a random flashcard using same logic as other random flashcards
+        showRandomFlashcard();
+        resetFlashcardTimer();
     }
 }

@@ -14,15 +14,15 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
 ### Key Components
 
 1. **Translation System**
-   - Loads translation files from `translation_keys/1.16.5/` directory
+   - Loads translation files from `src/main/resources/assets/languagemod/lang/`
    - Supports English (`en_us.json`) and Spanish (`es_mx.json`)
    - Uses Gson for JSON parsing with UTF-8 encoding
    - Translation keys follow Minecraft's standard format (e.g., `block.minecraft.stone`)
-   - All translations loaded from standard language files only
+   - All translations loaded from bundled resources for proper mod distribution
 
 2. **Progress Tracking System (`ProgressManager.java`)**
    - Tracks discovered items, blocks, biomes, and entities
-   - Saves progress to `progress_tracker.json`
+   - Saves progress to config directory (`languagemod_progress.json`)
    - Manages flashcard data and spaced repetition
    - Tracks mastery status (5 correct answers = mastered)
    - Handles welcome message preferences
@@ -37,14 +37,13 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
    - Retry mechanism for incorrect answers
    - Mastery notification after 5 correct answers
 
-4. **Audio System (`AudioManager.java`)**
-   - Direct file loading - no mapping file needed
-   - Supports both MP3 and OGG formats (prefers OGG)
-   - Audio files named with translation keys (e.g., `block.minecraft.stone.mp3`)
-   - VLC integration for reliable playback (if installed)
-   - Fallback methods for Windows/Mac/Linux
-   - Asynchronous playback to prevent game freezing
-   - Playback speed control via `/slow` command
+4. **Audio System (`AudioManager.java` + `ModSounds.java`)**
+   - Uses Minecraft's native sound system for proper integration
+   - OGG format only (bundled in mod resources)
+   - Sound events registered via Forge's DeferredRegister system
+   - Audio files named with translation keys (e.g., `block.minecraft.stone.ogg`)
+   - Proper volume control respecting Minecraft settings
+   - Sound events defined in `sounds.json` with 2,124 registered sounds
 
 5. **Input Handler (`KeyInputHandler.java`)**
    - Single F key with smart priority system:
@@ -83,15 +82,12 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
 - **No Spanish Descriptions**: Clean, simple interface
 
 ### Audio Implementation
-- **Audio Files**: 4,800+ audio files in `audio/es_mx/` directory
-- **File Naming**: Direct translation key naming (no mapping needed)
-- **Format Support**: MP3 and OGG (OGG preferred)
-- **Playback Methods**:
-  - VLC (hidden mode, best for MP3)
-  - PowerShell Media Player (Windows)
-  - Default system player (last resort)
-- **Volume Control**: Respects Minecraft master volume
-- **Speed Control**: Adjustable playback speed
+- **Audio Files**: 2,124 OGG audio files in `src/main/resources/assets/languagemod/sounds/es_mx/`
+- **File Naming**: Direct translation key naming (e.g., `block.minecraft.stone.ogg`)
+- **Format Support**: OGG only (Minecraft native sound system)
+- **Playback Methods**: Minecraft's native sound system with proper sound event registration
+- **Volume Control**: Respects Minecraft master volume and sound effect volume
+- **Registration**: Uses Forge's DeferredRegister system for proper sound event handling
 
 ### Data Files
 - **en_us.json**: English translations for all game elements
@@ -122,27 +118,39 @@ This is a Minecraft Forge mod for version 1.16.5 that displays real-time languag
 
 ### Current Status
 - ✅ Full translation system with 5000+ items
-- ✅ Progress tracking and persistence
+- ✅ Progress tracking and persistence (saves to config directory)
 - ✅ Flashcard system with fuzzy matching
 - ✅ Mastery notifications
-- ✅ Audio playback (best with VLC or OGG files)
+- ✅ Proper mod structure with bundled resources
 - ✅ Command system for progress and settings
 - ✅ Entity translations included
 - ✅ UTF-8 support for proper Spanish characters
 - ✅ Clean HUD without flashing
+- ✅ Minecraft native sound system integration
 
 ### Recent Changes
+- **Major Refactoring**: Converted from external file system to proper Minecraft mod structure
+- **Audio System Overhaul**: Replaced VLC/MP3 system with Minecraft's native sound system
+- **Resource Bundling**: All files now bundled in mod JAR for single-file distribution
+- **Sound Registration**: Implemented proper Forge sound event registration with DeferredRegister
+- **Translation Loading**: Now loads from mod resources instead of external files
+- **Config Directory**: Progress file now saves to Minecraft's config directory
 - Removed all discovery messages (only mastery messages remain)
-- Removed Spanish descriptions from HUD
-- Fixed text encoding issues (removed special quotes and ¡ characters)
-- Added persistent section headers to prevent flashing
-- Implemented flashcard timing logic (5-minute cooldown after correct answer)
-- Added shadow to all HUD text for better readability
-- Simplified welcome message
-- Updated command system with /languagehelp and /progress
+- Fixed text encoding issues and improved HUD readability
 
-### Known Limitations
-- MP3 playback requires VLC for best results
-- Windows-specific file paths (hardcoded)
-- No configuration GUI yet
-- Audio speed control limited by playback method
+### Known Issues & Limitations
+- **Audio Not Playing**: Critical issue - sounds are properly registered but do not play
+  - All 2,124 sound events are successfully registered from sounds.json
+  - Sound files exist and are valid OGG format (verified playable outside Minecraft)
+  - Vanilla Minecraft sounds play correctly (verified with /testvanilla command)
+  - Multiple playback methods attempted (world.playSound, playLocalSound, SimpleSound)
+  - All volume settings confirmed at 100%
+  - Issue appears to be with Minecraft not loading the OGG files from mod resources
+  - Possible causes: OGG encoding incompatibility, resource loading issue, or Forge sound system limitation
+- **No Configuration GUI**: All settings managed via commands
+- **Playback Speed**: Minecraft's sound system doesn't support variable playback speed
+
+### Debug Commands Added
+- `/testvanilla` - Plays vanilla bell sound to verify sound system works
+- `/debugsound <key>` - Shows detailed debug info for a specific sound
+- `/checkresource <key>` - Verifies if OGG file exists in mod resources
